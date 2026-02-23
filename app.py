@@ -49,9 +49,10 @@ with col1:
     
     st.info("💡 **Benchmark Library:** Load standard geometries to test the solver and AI.")
     
-    col_btn1, col_btn2 = st.columns(2)
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    
     with col_btn1:
-        if st.button("📚 Load 3D Tetrahedron"):
+        if st.button("🔺 Load Tetrahedron"):
             st.session_state['nodes_data'] = pd.DataFrame([
                 [0.0, 0.0, 0.0, 1, 1, 1],  
                 [3.0, 0.0, 0.0, 0, 1, 1],  
@@ -72,41 +73,102 @@ with col1:
             clear_results()
 
     with col_btn2:
-        if st.button("🗼 Load 25-Bar Tower"):
-            # The classic 25-Bar Spatial Truss Benchmark
+        if st.button("🗼 Load 25-Bar"):
             st.session_state['nodes_data'] = pd.DataFrame([
-                [-1.0, 0.0, 5.0, 0, 0, 0],   # Node 1 (Top)
-                [1.0, 0.0, 5.0, 0, 0, 0],    # Node 2 (Top)
-                [-1.0, 1.0, 2.5, 0, 0, 0],   # Node 3 (Mid)
-                [1.0, 1.0, 2.5, 0, 0, 0],    # Node 4 (Mid)
-                [1.0, -1.0, 2.5, 0, 0, 0],   # Node 5 (Mid)
-                [-1.0, -1.0, 2.5, 0, 0, 0],  # Node 6 (Mid)
-                [-2.5, 2.5, 0.0, 1, 1, 1],   # Node 7 (Base - Pinned)
-                [2.5, 2.5, 0.0, 1, 1, 1],    # Node 8 (Base - Pinned)
-                [2.5, -2.5, 0.0, 1, 1, 1],   # Node 9 (Base - Pinned)
-                [-2.5, -2.5, 0.0, 1, 1, 1]   # Node 10 (Base - Pinned)
+                [-1.0, 0.0, 5.0, 0, 0, 0], [1.0, 0.0, 5.0, 0, 0, 0], 
+                [-1.0, 1.0, 2.5, 0, 0, 0], [1.0, 1.0, 2.5, 0, 0, 0], 
+                [1.0, -1.0, 2.5, 0, 0, 0], [-1.0, -1.0, 2.5, 0, 0, 0], 
+                [-2.5, 2.5, 0.0, 1, 1, 1], [2.5, 2.5, 0.0, 1, 1, 1], 
+                [2.5, -2.5, 0.0, 1, 1, 1], [-2.5, -2.5, 0.0, 1, 1, 1]
             ], columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
             
             st.session_state['members_data'] = pd.DataFrame([
-                [1, 2, 0.005, 2e11], # G1: 1
-                [1, 4, 0.005, 2e11], [2, 3, 0.005, 2e11], [1, 5, 0.005, 2e11], [2, 6, 0.005, 2e11], # G2: 2-5
-                [1, 3, 0.005, 2e11], [2, 4, 0.005, 2e11], [2, 5, 0.005, 2e11], [1, 6, 0.005, 2e11], # G3: 6-9
-                [3, 6, 0.005, 2e11], [4, 5, 0.005, 2e11], # G4: 10-11
-                [3, 4, 0.005, 2e11], [5, 6, 0.005, 2e11], # G5: 12-13
-                [3, 10, 0.005, 2e11], [6, 7, 0.005, 2e11], [4, 9, 0.005, 2e11], [5, 8, 0.005, 2e11], # G6: 14-17
-                [3, 8, 0.005, 2e11], [4, 7, 0.005, 2e11], [6, 9, 0.005, 2e11], [5, 10, 0.005, 2e11], # G7: 18-21
-                [3, 7, 0.005, 2e11], [4, 8, 0.005, 2e11], [5, 9, 0.005, 2e11], [6, 10, 0.005, 2e11]  # G8: 22-25
+                [1, 2, 0.005, 2e11], [1, 4, 0.005, 2e11], [2, 3, 0.005, 2e11], [1, 5, 0.005, 2e11], 
+                [2, 6, 0.005, 2e11], [1, 3, 0.005, 2e11], [2, 4, 0.005, 2e11], [2, 5, 0.005, 2e11], 
+                [1, 6, 0.005, 2e11], [3, 6, 0.005, 2e11], [4, 5, 0.005, 2e11], [3, 4, 0.005, 2e11], 
+                [5, 6, 0.005, 2e11], [3, 10, 0.005, 2e11], [6, 7, 0.005, 2e11], [4, 9, 0.005, 2e11], 
+                [5, 8, 0.005, 2e11], [3, 8, 0.005, 2e11], [4, 7, 0.005, 2e11], [6, 9, 0.005, 2e11], 
+                [5, 10, 0.005, 2e11], [3, 7, 0.005, 2e11], [4, 8, 0.005, 2e11], [5, 9, 0.005, 2e11], 
+                [6, 10, 0.005, 2e11]
             ], columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
             
             st.session_state['loads_data'] = pd.DataFrame([
-                [1, 10000.0, 50000.0, -50000.0], # Complex 3D asymmetric loading
-                [2, 0.0, 50000.0, -50000.0],
-                [3, 10000.0, 0.0, 0.0],
-                [6, 10000.0, 0.0, 0.0]
+                [1, 10000.0, 50000.0, -50000.0], [2, 0.0, 50000.0, -50000.0],
+                [3, 10000.0, 0.0, 0.0], [6, 10000.0, 0.0, 0.0]
             ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
             
-            # The exact 8 symmetry groups used in academic literature for the 25-bar truss
             st.session_state['group_input_val'] = "1; 2, 3, 4, 5; 6, 7, 8, 9; 10, 11; 12, 13; 14, 15, 16, 17; 18, 19, 20, 21; 22, 23, 24, 25"
+            clear_results()
+
+    with col_btn3:
+        if st.button("🏗️ Load 72-Bar"):
+            # Parametric Generation of the 72-Bar Truss
+            nodes = []
+            # Base nodes (Level 0) - Fixed
+            nodes.append([-1.5, 1.5, 0.0, 1, 1, 1])
+            nodes.append([1.5, 1.5, 0.0, 1, 1, 1])
+            nodes.append([1.5, -1.5, 0.0, 1, 1, 1])
+            nodes.append([-1.5, -1.5, 0.0, 1, 1, 1])
+            
+            # Levels 1 to 4
+            for i in range(1, 5):
+                z = i * 1.5
+                nodes.append([-1.5, 1.5, z, 0, 0, 0])
+                nodes.append([1.5, 1.5, z, 0, 0, 0])
+                nodes.append([1.5, -1.5, z, 0, 0, 0])
+                nodes.append([-1.5, -1.5, z, 0, 0, 0])
+            st.session_state['nodes_data'] = pd.DataFrame(nodes, columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
+            
+            members = []
+            groups = []
+            member_id = 1
+            for t in range(4):
+                B1, B2, B3, B4 = t*4+1, t*4+2, t*4+3, t*4+4
+                T1, T2, T3, T4 = t*4+5, t*4+6, t*4+7, t*4+8
+                
+                # Verticals
+                v_group = []
+                for b, top in [(B1, T1), (B2, T2), (B3, T3), (B4, T4)]:
+                    members.append([b, top, 0.005, 2e11])
+                    v_group.append(str(member_id))
+                    member_id += 1
+                groups.append(", ".join(v_group))
+                
+                # Horizontals
+                h_group = []
+                for n1, n2 in [(T1, T2), (T2, T3), (T3, T4), (T4, T1)]:
+                    members.append([n1, n2, 0.005, 2e11])
+                    h_group.append(str(member_id))
+                    member_id += 1
+                groups.append(", ".join(h_group))
+                
+                # Face Diagonals
+                fd_group = []
+                for n1, n2 in [(B1, T2), (B2, T1), (B2, T3), (B3, T2), (B3, T4), (B4, T3), (B4, T1), (B1, T4)]:
+                    members.append([n1, n2, 0.005, 2e11])
+                    fd_group.append(str(member_id))
+                    member_id += 1
+                groups.append(", ".join(fd_group))
+                
+                # Plan Diagonals
+                pd_group = []
+                for n1, n2 in [(T1, T3), (T2, T4)]:
+                    members.append([n1, n2, 0.005, 2e11])
+                    pd_group.append(str(member_id))
+                    member_id += 1
+                groups.append(", ".join(pd_group))
+                
+            st.session_state['members_data'] = pd.DataFrame(members, columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
+            
+            # Apply standard asymmetric loading at the top nodes
+            st.session_state['loads_data'] = pd.DataFrame([
+                [17, 50000.0, 50000.0, -25000.0],
+                [18, 0.0, 0.0, -25000.0],
+                [19, 0.0, 0.0, -25000.0],
+                [20, 0.0, 0.0, -25000.0]
+            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
+            
+            st.session_state['group_input_val'] = "; ".join(groups)
             clear_results()
 
     if 'nodes_data' not in st.session_state:
