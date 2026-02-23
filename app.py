@@ -365,7 +365,63 @@ with col1:
             clear_results()
             st.success("Model updated! Scroll up and click 'Calculate Results' to view the new force distribution.")
             st.rerun()
-
+    # ---------------------------------------------------------
+    # NEW SECTION: PROFESSIONAL PDF REPORT GENERATION
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📄 Export Documentation")
+    
+    if 'solved_truss' in st.session_state:
+        from report_gen import generate_pdf_report
+        
+        if st.button("⚙️ Generate Professional PDF Report"):
+            with st.spinner("Compiling LaTeX document (pdflatex)..."):
+                try:
+                    base_ts = st.session_state['solved_truss']
+                    fig_base_img = st.session_state.get('base_fig', None)
+                    fig_res_img = st.session_state.get('current_fig', None)
+                    
+                    # Package AI data if optimization was run
+                    opt_payload = None
+                    if 'optimized_sections' in st.session_state:
+                        # Recalculate weights quickly for the report
+                        orig_w = sum([m.A * m.L * 7850 for m in base_ts.members])
+                        from is_catalog import get_isa_catalog
+                        cat = get_isa_catalog()
+                        final_w = 0
+                        for m in base_ts.members:
+                            if m.id in st.session_state['optimized_sections']:
+                                sec_name = st.session_state['optimized_sections'][m.id]
+                                w_per_m = cat[cat['Designation'] == sec_name]['Weight_kg_m'].values[0]
+                                final_w += m.L * w_per_m
+                            else:
+                                final_w += m.A * m.L * 7850
+                                
+                        opt_payload = {
+                            'sections': st.session_state['optimized_sections'],
+                            'orig_weight': orig_w,
+                            'final_weight': final_w
+                        }
+                    
+                    # Call the LaTeX compiler
+                    pdf_bytes = generate_pdf_report(
+                        ts_solved=base_ts, 
+                        opt_data=opt_payload,
+                        fig_base=fig_base_img, 
+                        fig_res=fig_res_img,
+                        scale_factor=current_scale, 
+                        unit_label=current_unit
+                    )
+                    
+                    st.download_button(
+                        label="⬇️ Download PDF Report",
+                        data=pdf_bytes,
+                        file_name=f"Truss_Analysis_Report_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+                except Exception as e:
+                    st.error(f"Failed to generate PDF: {e}")
 with col2:
     st.header("2. 3D Model Visualization")
     tab1, tab2 = st.tabs(["🏗️ Undeformed Geometry", "📊 Structural Forces (Results)"])
