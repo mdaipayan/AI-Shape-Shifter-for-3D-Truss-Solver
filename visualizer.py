@@ -25,7 +25,9 @@ def draw_undeformed_geometry(node_df, member_df, load_df, scale_factor=1000.0, u
             marker=dict(size=6, color='black'), showlegend=False
         ))
 
-    # 2. Plot Members
+    # 2. Plot Members and Member Labels
+    mid_x, mid_y, mid_z, mbr_labels = [], [], [], []
+    
     if not node_df.empty and not member_df.empty:
         for i, row in member_df.iterrows():
             try:
@@ -38,12 +40,29 @@ def draw_undeformed_geometry(node_df, member_df, load_df, scale_factor=1000.0, u
                 x0, y0, z0 = float(n1['X']), float(n1['Y']), float(n1['Z'])
                 x1, y1, z1 = float(n2['X']), float(n2['Y']), float(n2['Z'])
                 
+                # Draw the dashed line
                 fig_base.add_trace(go.Scatter3d(
                     x=[x0, x1], y=[y0, y1], z=[z0, z1], 
                     mode='lines', line=dict(color='gray', width=4, dash='dash'), showlegend=False
                 ))
+                
+                # Calculate midpoints for the Member ID labels
+                mid_x.append((x0 + x1) / 2)
+                mid_y.append((y0 + y1) / 2)
+                mid_z.append((z0 + z1) / 2)
+                mbr_labels.append(f"M{i+1}")
+                
             except (ValueError, TypeError, IndexError, KeyError):
                 member_errors.append(str(i+1))
+
+        # Add the Member ID text tags at the midpoints
+        if mbr_labels:
+            fig_base.add_trace(go.Scatter3d(
+                x=mid_x, y=mid_y, z=mid_z,
+                mode='text', text=mbr_labels,
+                textfont=dict(color='blue', size=11, family="Arial"),
+                showlegend=False
+            ))
 
     # Configure 3D Scene
     fig_base.update_layout(
@@ -93,11 +112,11 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
             mode='lines', line=dict(color=color, width=8), showlegend=False
         ))
         
-        # Save midpoint data for text rendering
+        # Save midpoint data for text rendering (Now includes Member ID!)
         mid_x.append((x0 + x1) / 2)
         mid_y.append((y0 + y1) / 2)
         mid_z.append((z0 + z1) / 2)
-        mid_text.append(f"{val_scaled} {unit_label}")
+        mid_text.append(f"M{mbr.id}: {val_scaled} {unit_label}") 
         mid_colors.append(color)
 
     # Add force value text tags at midpoints
