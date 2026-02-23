@@ -414,17 +414,17 @@ with col1:
                     opt_payload = None
                     if 'optimized_sections' in st.session_state:
                         # Recalculate weights quickly for the report
-                        orig_w = sum([m.A * m.L * 7850 for m in base_ts.members])
+                        orig_w = sum([mbr.A * mbr.L * 7850 for mbr in base_ts.members])
                         from is_catalog import get_isa_catalog
                         cat = get_isa_catalog()
                         final_w = 0
-                        for m in base_ts.members:
-                            if m.id in st.session_state['optimized_sections']:
-                                sec_name = st.session_state['optimized_sections'][m.id]
+                        for mbr in base_ts.members:
+                            if mbr.id in st.session_state['optimized_sections']:
+                                sec_name = st.session_state['optimized_sections'][mbr.id]
                                 w_per_m = cat[cat['Designation'] == sec_name]['Weight_kg_m'].values[0]
-                                final_w += m.L * w_per_m
+                                final_w += mbr.L * w_per_m
                             else:
-                                final_w += m.A * m.L * 7850
+                                final_w += mbr.A * mbr.L * 7850
                                 
                         opt_payload = {
                             'sections': st.session_state['optimized_sections'],
@@ -490,10 +490,10 @@ if 'solved_truss' in st.session_state:
     with gb_tab1:
         st.subheader("Local Element Formulation (3D)")
         if ts.members: 
-            mbr_opts = [f"Member {m.id}" for m in ts.members]
+            mbr_opts = [f"Member {mbr.id}" for mbr in ts.members]
             sel_mbr = st.selectbox("Select Member to inspect kinematics and stiffness:", mbr_opts, key="gb_tab1")
             selected_id = int(sel_mbr.split(" ")[1])
-            m = next((m for m in ts.members if m.id == selected_id), None)
+            m = next((mbr for mbr in ts.members if mbr.id == selected_id), None)
             
             colA, colB = st.columns([1, 2])
             with colA:
@@ -539,7 +539,7 @@ if 'solved_truss' in st.session_state:
             if ts.members:
                 sel_mbr_force = st.selectbox("Select Member to view Force Extraction:", mbr_opts, key="gb_tab3")
                 selected_id = int(sel_mbr_force.split(" ")[1])
-                m = next((m for m in ts.members if m.id == selected_id), None)
+                m = next((mbr for mbr in ts.members if mbr.id == selected_id), None)
                 
                 if m and hasattr(m, 'u_local') and m.u_local is not None:
                     st.latex(r"F_{axial} = \frac{EA}{L} \cdot (T \cdot u_{local})")
