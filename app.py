@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from core_solver import TrussSystem, Node, Member
 from ai_optimizer import TrussOptimizer
+from is_catalog import get_isa_catalog
 import datetime
 import os
 from visualizer import draw_undeformed_geometry, draw_results_fbd
@@ -34,6 +35,8 @@ def clear_results():
         del st.session_state['solved_truss']
     if 'report_data' in st.session_state:
         del st.session_state['report_data']
+    if 'optimized_sections' in st.session_state:
+        del st.session_state['optimized_sections']
 
 col1, col2 = st.columns([1, 2])
 
@@ -160,76 +163,98 @@ with col1:
             st.error(f"Error: {e}")
 
     # ---------------------------------------------------------
-    # NEW SECTION: AI SIZE OPTIMIZATION
+    # NEW SECTION: IS 800 DISCRETE AI SIZE OPTIMIZATION
     # ---------------------------------------------------------
     st.markdown("---")
-    st.subheader("🧠 AI Size Optimization")
-    st.info("Uses an Evolutionary Algorithm to find the absolute minimum weight structure without violating steel stress or nodal deflection limits.")
+    st.subheader("🧠 IS 800 Discrete AI Optimization")
+    st.info("Utilizes an Evolutionary Algorithm to assign standard Indian Standard Equal Angles (ISA) from the SP(6) catalog. Evaluates structural stability against IS 800 column buckling curves.")
     
     opt_col1, opt_col2 = st.columns(2)
     with opt_col1:
         yield_stress_mpa = st.number_input("Steel Yield Stress (MPa)", value=250.0, step=10.0)
-        max_deflection_mm = st.number_input("Max Deflection (mm)", value=50.0, step=5.0)
     with opt_col2:
-        min_area_cm2 = st.number_input("Min Area (cm²)", value=1.0, step=1.0)
-        max_area_cm2 = st.number_input("Max Area (cm²)", value=500.0, step=10.0)
+        max_deflection_mm = st.number_input("Max Nodal Deflection (mm)", value=50.0, step=5.0)
         
-    if st.button("🚀 Run AI Size Optimization"):
+    st.markdown("**Symmetry & Constructability (Member Grouping)**")
+    st.caption("Enter comma-separated Member IDs to group them into identical sections. Separate groups with a semicolon (;).")
+    grouping_input = st.text_input("Member Groups", value="1, 2, 3; 4, 5, 6")
+        
+    if st.button("🚀 Run Discrete AI Optimization"):
         if 'solved_truss' not in st.session_state:
             st.warning("⚠️ Please run a standard 'Calculate Results' first to validate the base geometry.")
         else:
-            with st.spinner("🧬 Evolutionary AI is mutating and evaluating thousands of designs..."):
-                base_ts = st.session_state['solved_truss']
-                
-                try:
-                    # Initialize the Optimizer (Converting units to base SI: Pa and meters)
-                    optimizer = TrussOptimizer(
-                        base_truss=base_ts, 
-                        yield_stress=yield_stress_mpa * 1e6, 
-                        max_deflection=max_deflection_mm / 1000.0 
-                    )
+            # Parse the grouping input
+            try:
+                parsed_groups = []
+                for g in grouping_input.split(';'):
+                    group = [int(x.strip()) for x in g.split(',') if x.strip()]
+                    if group:
+                        parsed_groups.append(group)
+            except ValueError:
+                st.error("❌ Invalid grouping format. Please use numbers separated by commas and semicolons (e.g., 1,2; 3,4).")
+                parsed_groups = None
+
+            if parsed_groups:
+                with st.spinner("🧬 AI is testing thousands of discrete IS 800 angle combinations..."):
+                    base_ts = st.session_state['solved_truss']
                     
-                    # Run the Differential Evolution (Converting cm² to m²)
-                    opt_areas, final_weight, success = optimizer.optimize(
-                        min_area=min_area_cm2 / 10000.0, 
-                        max_area=max_area_cm2 / 10000.0
-                    )
-                    
-                    # NEW LOGIC: Check if the best design survived the penalty phase (< 1,000,000 kg)
-                    if final_weight < 1e6: 
-                        if success:
-                            st.success("🎉 Optimization Converged Perfectly!")
-                        else:
-                            st.warning("⚠️ The AI hit its generation limit, but still found a highly optimized and valid design!")
-                            
-                        # Calculate original weight for comparison
-                        orig_weight = sum([m.A * m.L * 7850 for m in base_ts.members])
-                        weight_saved = orig_weight - final_weight
-                        pct_saved = (weight_saved / orig_weight) * 100
-                        
-                        # Display high-level metrics
-                        st.metric(
-                            label="Total Steel Weight", 
-                            value=f"{final_weight:.2f} kg", 
-                            delta=f"-{weight_saved:.2f} kg ({pct_saved:.1f}% Lighter)", 
-                            delta_color="inverse"
+                    try:
+                        optimizer = TrussOptimizer(
+                            base_truss=base_ts, 
+                            member_groups=parsed_groups,
+                            yield_stress=yield_stress_mpa * 1e6, 
+                            max_deflection=max_deflection_mm / 1000.0 
                         )
                         
-                        # Display the detailed comparison table
-                        results_df = pd.DataFrame({
-                            "Member": [f"M{m.id}" for m in base_ts.members],
-                            "Original Area (cm²)": [m.A * 10000 for m in base_ts.members],
-                            "Optimized Area (cm²)": [a * 10000 for a in opt_areas],
-                        })
+                        final_sections, final_weight, is_valid = optimizer.optimize()
                         
-                        st.dataframe(results_df.style.format({
-                            "Original Area (cm²)": "{:.2f}",
-                            "Optimized Area (cm²)": "{:.2f}"
-                        }))
-                    else:
-                        st.error("❌ Optimizer failed to find ANY design that satisfies the constraints. The loads are too heavy for these limits.")
-                except Exception as e:
-                    st.error(f"Optimization Error: {e}")
+                        if is_valid:
+                            st.success("🎉 Discrete Optimization Converged Successfully!")
+                            st.session_state['optimized_sections'] = final_sections
+                            
+                            orig_weight = sum([m.A * m.L * 7850 for m in base_ts.members])
+                            weight_saved = orig_weight - final_weight
+                            pct_saved = (weight_saved / orig_weight) * 100
+                            
+                            st.metric(
+                                label="Total Optimized Steel Weight", 
+                                value=f"{final_weight:.2f} kg", 
+                                delta=f"-{weight_saved:.2f} kg ({pct_saved:.1f}% Lighter vs Baseline)", 
+                                delta_color="inverse"
+                            )
+                            
+                            # Display the detailed comparison table
+                            results_df = pd.DataFrame({
+                                "Member": [f"M{m.id}" for m in base_ts.members],
+                                "Optimized IS 800 Section": [final_sections.get(m.id, "Error") for m in base_ts.members],
+                            })
+                            
+                            st.dataframe(results_df)
+                        else:
+                            st.error("❌ Optimizer failed to find ANY catalog combination that satisfies the IS 800 buckling constraints. The loads are too heavy for this geometry.")
+                    except Exception as e:
+                        st.error(f"Optimization Error: {e}")
+
+    # The Apply Button
+    if 'optimized_sections' in st.session_state:
+        st.markdown("---")
+        if st.button("✅ Apply Optimized Sections to Model"):
+            df_m = st.session_state['members_data'].copy()
+            catalog = get_isa_catalog()
+            
+            for i, row in df_m.iterrows():
+                m_id = i + 1
+                if m_id in st.session_state['optimized_sections']:
+                    sec_name = st.session_state['optimized_sections'][m_id]
+                    # Fetch the corresponding area in m^2 from the catalog
+                    area_m2 = catalog[catalog['Designation'] == sec_name]['Area_m2'].values[0]
+                    df_m.at[i, 'Area(sq.m)'] = area_m2
+            
+            # Save it back to the state and force a UI refresh
+            st.session_state['members_data'] = df_m
+            clear_results()
+            st.success("Model updated! Scroll up and click 'Calculate Results' to view the new force distribution.")
+            st.rerun()
 
 with col2:
     st.header("2. 3D Model Visualization")
