@@ -293,7 +293,6 @@ with col1:
         if 'solved_truss' not in st.session_state:
             st.warning("⚠️ Please run a standard 'Calculate Results' first to validate the base geometry.")
         else:
-            # Parse the grouping input
             try:
                 parsed_groups = []
                 for g in grouping_input.split(';'):
@@ -301,7 +300,7 @@ with col1:
                     if group:
                         parsed_groups.append(group)
             except ValueError:
-                st.error("❌ Invalid grouping format. Please use numbers separated by commas and semicolons (e.g., 1,2; 3,4).")
+                st.error("❌ Invalid grouping format. Please use numbers separated by commas and semicolons.")
                 parsed_groups = None
 
             if parsed_groups:
@@ -316,7 +315,8 @@ with col1:
                             max_deflection=max_deflection_mm / 1000.0 
                         )
                         
-                        final_sections, final_weight, is_valid = optimizer.optimize(pop_size=20, max_gen=150) # Increased generations for complex tower
+                        # NEW: Unpacking the 4th variable (history)
+                        final_sections, final_weight, is_valid, history = optimizer.optimize(pop_size=20, max_gen=100) 
                         
                         if is_valid:
                             st.success("🎉 Discrete Optimization Converged Successfully!")
@@ -333,7 +333,35 @@ with col1:
                                 delta_color="inverse"
                             )
                             
-                            # Display the detailed comparison table
+                            # ---------------------------------------------------
+                            # NEW: Plot the Academic Convergence Curve
+                            # ---------------------------------------------------
+                            st.markdown("### 📈 Evolutionary Convergence Curve")
+                            st.caption("Validates algorithmic stability by tracking weight reduction across generations.")
+                            
+                            # Filter out massive penalty values from early random generations
+                            clean_hist = [w for w in history if w < 1e6]
+                            
+                            if clean_hist:
+                                fig_conv = go.Figure()
+                                fig_conv.add_trace(go.Scatter(
+                                    y=clean_hist,
+                                    mode='lines+markers',
+                                    name='Best Feasible Weight',
+                                    line=dict(color='forestgreen', width=3),
+                                    marker=dict(size=6, color='black')
+                                ))
+                                fig_conv.update_layout(
+                                    xaxis_title="Generation (Epoch)",
+                                    yaxis_title="Structural Weight (kg)",
+                                    margin=dict(l=0, r=0, t=10, b=0),
+                                    height=350,
+                                    plot_bgcolor="rgba(240, 240, 240, 0.5)"
+                                )
+                                st.plotly_chart(fig_conv, use_container_width=True)
+                            
+                            # ---------------------------------------------------
+                            
                             results_df = pd.DataFrame({
                                 "Member": [f"M{m.id}" for m in base_ts.members],
                                 "Optimized IS 800 Section": [final_sections.get(m.id, "Error") for m in base_ts.members],
@@ -341,7 +369,7 @@ with col1:
                             
                             st.dataframe(results_df)
                         else:
-                            st.error("❌ Optimizer failed to find ANY catalog combination that satisfies the IS 800 buckling constraints. The loads are too heavy for this geometry.")
+                            st.error("❌ Optimizer failed to find ANY catalog combination that satisfies the IS 800 constraints.")
                     except Exception as e:
                         st.error(f"Optimization Error: {e}")
 
