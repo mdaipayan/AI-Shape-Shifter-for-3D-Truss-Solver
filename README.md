@@ -1,36 +1,48 @@
-# 🏗️ Professional Space Truss Suite (3D)
+# 🏗️ Professional Space Truss Analysis (3D)
 
-**A Pedagogical & Commercial-Grade Structural Analysis Tool**
+A state-of-the-art, web-based 3D structural analysis and optimization suite built with Python and Streamlit. This application features a robust Direct Stiffness Method (DSM) solver, geometric non-linear capabilities, and a discrete Evolutionary AI sizing optimizer based on the Indian Standard (IS 800:2007) steel catalog.
 
-Developed by **Mr. D Mandal**, Assistant Professor, Department of Civil Engineering, KITS Ramtek.
-
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-red.svg)](https://streamlit.io/)
-[![License](https://img.shields.io/badge/License-GPLv3-green.svg)](https://www.gnu.org/licenses/gpl-3.0)
+Developed by **Daipayan Mandal**, Assistant Professor at KITS Ramtek, this tool is designed for both rigorous engineering design and pedagogical exploration of structural optimization using AI.
 
 ---
 
-## 📖 Software Overview
-
-The **Professional Space Truss Suite** is an interactive, web-based environment for the linear static analysis of 3D spatial structures using the **Direct Stiffness Method (DSM)**. 
-
-Unlike commercial "black-box" software that hides the underlying mathematics, this application is designed as a **"Glass-Box" educational tool**. It bridges the gap between finite element theory and computational execution, allowing engineering students to observe the formulation of $6 \times 6$ local stiffness matrices and 3D direction cosines in real-time.
-
 ## ✨ Key Features
 
-* 🎓 **Educational "Glass-Box" Engine:** View step-by-step mathematical formulations including 3D direction cosines ($l, m, n$), $6 \times 6$ element stiffness matrices ($k$), and matrix partitioning.
-* 🌐 **Interactive 3D Visualization:** Renders high-fidelity, interactive Plotly 3D graphics displaying undeformed geometry, load application, and color-coded axial forces (Tension/Compression).
-* 🔄 **Real-Time Unit Scaling:** Seamlessly toggle the visual output between Newtons (N), Kilonewtons (kN), and Meganewtons (MN) without altering the base SI solver engine.
-* 📝 **1-Click Professional Reporting:** Automatically generates a comprehensive `.docx` calculation report containing embedded 3D graphics, nodal displacements, and categorized member forces.
+* **Advanced 3D Matrix Solver:** Implements the Direct Stiffness Method for 3D space trusses with 3 DOFs per node.
+* **Geometric Non-Linearity (P-Δ):** Features an Incremental Newton-Raphson solver utilizing a true-stretch kinematic formulation and updated Lagrangian matrices for large-deflection analysis.
+* **Discrete AI Sizing Optimization:** Integrates SciPy's Differential Evolution algorithm to automatically select optimal Indian Standard Equal Angles (ISA) from the SP(6) catalog while minimizing weight and strictly satisfying IS 800 buckling and yield constraints.
+* **Educational "Glass-Box" Mode:** Exposes the intermediate mathematical steps of the DSM, displaying local kinematics, global coordinate transformations, stiffness matrix assembly, and degree-of-freedom partitioning in real-time.
+* **Interactive 3D Visualizations:** Renders undeformed geometry, load application, and post-analysis free body diagrams (FBD) with color-coded axial forces using Plotly.
+* **Professional PDF Reporting:** Compiles formal analysis documentation, including high-resolution 3D plots, nodal displacements, member forces, and AI optimization metrics.
 
-## 🚀 Installation & Local Setup
+---
 
-### Prerequisites
-* Python 3.9 or newer.
+## 🧮 Mathematical Foundation
 
-### Instructions
+### 1. Linear Elastic Direct Stiffness Method (DSM)
+The core linear solver evaluates the equilibrium equation:
+$$F = K \cdot U$$
+Where the 6x6 global element stiffness matrix for a 3D truss member is defined by its direction cosines ($l, m, n$):
+$$k_{global} = \frac{EA}{L} \begin{bmatrix} l^2 & lm & ln & -l^2 & -lm & -ln \\ lm & m^2 & mn & -lm & -m^2 & -mn \\ ln & mn & n^2 & -ln & -mn & -n^2 \\ -l^2 & -lm & -ln & l^2 & lm & ln \\ -lm & -m^2 & -mn & lm & m^2 & mn \\ -ln & -mn & -n^2 & ln & mn & n^2 \end{bmatrix}$$
 
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/mdaipayan/Truss_app.git](https://github.com/mdaipayan/Truss_app.git)
-   cd Truss_app
+
+### 2. Geometric Non-Linearity & Instability
+To capture large displacements, the tangent stiffness matrix is iteratively updated across incremental load steps:
+$$K_T = K_E + K_G$$
+The geometric stiffness matrix ($K_G$) modifies the structural stiffness based on current internal axial forces, effectively modeling tension-stiffening and compression-softening (P-Delta effects).
+
+### 3. AI Sizing Optimization
+The AI engine utilizes a metaheuristic evolutionary algorithm (Differential Evolution) to solve the discrete constrained optimization problem:
+$$\text{Minimize: } W = \sum_{i=1}^{m} \rho \cdot A_i \cdot L_i + P_v$$
+Where $P_v$ is a quadratic penalty function applied when a candidate structure violates IS 800 allowable compressive buckling stresses, tensile yield limits, or user-defined maximum nodal deflections.
+
+---
+
+## 🚀 Installation & Setup
+
+Ensure you have Python 3.9+ installed.
+
+**1. Clone the repository (or download the source files):**
+```bash
+git clone [https://github.com/yourusername/professional-truss-suite.git](https://github.com/yourusername/professional-truss-suite.git)
+cd professional-truss-suite
