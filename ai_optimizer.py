@@ -12,7 +12,7 @@ class TrussOptimizer:
         self.catalog = get_isa_catalog()
         self.yield_stress = yield_stress
         self.max_deflection = max_deflection
-        self.history = [] # NEW: Array to track convergence history
+        self.history = [] # Array to track convergence history
         
         # Setup Grouping (Symmetry)
         if member_groups is None:
@@ -34,12 +34,13 @@ class TrussOptimizer:
             weight_kg_per_m = self.catalog.loc[cat_idx, "Weight_kg_m"]
             
             for m_id in member_ids:
-                m = next((member for member in self.ts.members if m.id == m_id), None)
-                if m:
-                    m.A = area_m2
-                    m.r_min = r_min_m
-                    m.k_global_matrix = (m.E * m.A / m.L) * np.outer(m.T_vector, m.T_vector)
-                    weight += m.L * weight_kg_per_m
+                # FIX: Scoping issue resolved by using 'member.id' and 'mbr'
+                mbr = next((member for member in self.ts.members if member.id == m_id), None)
+                if mbr:
+                    mbr.A = area_m2
+                    mbr.r_min = r_min_m
+                    mbr.k_global_matrix = (mbr.E * mbr.A / mbr.L) * np.outer(mbr.T_vector, mbr.T_vector)
+                    weight += mbr.L * weight_kg_per_m
                     
         # 2. Solve the structure
         try:
@@ -53,24 +54,26 @@ class TrussOptimizer:
         if self.ts.U_global is not None:
             max_disp = np.max(np.abs(self.ts.U_global))
             if max_disp > self.max_deflection:
-                penalty += 1e9 * (max_disp / self.max_deflection)
+                penalty += 1e9 * (max_disp / self.max_deflection)**2
                 
         for m in self.ts.members:
             actual_stress = m.internal_force / m.A
             if actual_stress > 0: # Tension
                 allowable_tens = self.yield_stress / 1.1 
                 if actual_stress > allowable_tens:
-                    penalty += 1e9 * (actual_stress / allowable_tens)
+                    # Exponential scaling for smoother gradient mapping
+                    penalty += 1e9 * (actual_stress / allowable_tens)**2
             else: # Compression (IS 800 Buckling)
                 allowable_comp = m.get_is800_buckling_stress(self.yield_stress)
                 if abs(actual_stress) > allowable_comp:
-                    penalty += 1e9 * (abs(actual_stress) / allowable_comp)
+                    # Exponential scaling for smoother gradient mapping
+                    penalty += 1e9 * (abs(actual_stress) / allowable_comp)**2
                     
         return weight + penalty
 
     def _callback(self, xk, convergence=None):
         """
-        NEW: SciPy callback function. Fires at the end of every generation.
+        SciPy callback function. Fires at the end of every generation.
         xk contains the best IS Catalog indices found so far.
         """
         best_val = self.objective_function(xk)
@@ -109,5 +112,5 @@ class TrussOptimizer:
                 
         is_valid = final_weight < 1e6 
                 
-        # NEW: Now returning 4 variables, including the history array
+        # Returning 4 variables, including the history array
         return final_sections, final_weight, is_valid, self.history
