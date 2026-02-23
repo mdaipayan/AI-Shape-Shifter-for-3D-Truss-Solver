@@ -322,7 +322,7 @@ with col1:
                             st.success("🎉 Discrete Optimization Converged Successfully!")
                             st.session_state['optimized_sections'] = final_sections
                             
-                            orig_weight = sum([m.A * m.L * 7850 for m in base_ts.members])
+                            orig_weight = sum([mbr.A * mbr.L * 7850 for mbr in base_ts.members])
                             weight_saved = orig_weight - final_weight
                             pct_saved = (weight_saved / orig_weight) * 100
                             
@@ -363,8 +363,8 @@ with col1:
                             # ---------------------------------------------------
                             
                             results_df = pd.DataFrame({
-                                "Member": [f"M{m.id}" for m in base_ts.members],
-                                "Optimized IS 800 Section": [final_sections.get(m.id, "Error") for m in base_ts.members],
+                                "Member": [f"M{mbr.id}" for mbr in base_ts.members],
+                                "Optimized IS 800 Section": [final_sections.get(mbr.id, "Error") for mbr in base_ts.members],
                             })
                             
                             st.dataframe(results_df)
