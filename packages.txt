@@ -1,2 +1,5 @@
 libgl1
 libxrender1
+texlive-latex-base
+texlive-latex-extra
+texlive-fonts-recommended
