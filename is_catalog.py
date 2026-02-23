@@ -1,5 +1,7 @@
 import pandas as pd
+from functools import lru_cache
 
+@lru_cache(maxsize=1)
 def get_isa_catalog():
     """
     Returns a Pandas DataFrame containing standard Indian Standard Equal Angles (ISA)
