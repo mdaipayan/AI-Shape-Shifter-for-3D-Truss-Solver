@@ -4,12 +4,11 @@ import copy
 from is_catalog import get_isa_catalog
 
 class TrussOptimizer:
-    def __init__(self, base_combos, is_nonlinear=False, load_steps=10, member_groups=None, yield_stress=250e6, max_deflection=0.05):
+    def __init__(self, base_combos, is_nonlinear=False, load_steps=10, member_groups=None, shape_bounds=None, yield_stress=250e6, max_deflection=0.05):
         """
-        Discrete AI Optimizer using IS 800 Catalog and Member Grouping.
-        Evaluates the worst-case Absolute Max/Min Envelope across multiple load combinations.
+        Combined Shape and Sizing Optimizer.
+        shape_bounds: dict mapping Node_ID to [dx_min, dx_max, dy_min, dy_max, dz_min, dz_max]
         """
-        # Deepcopy all combinations so we don't accidentally overwrite the UI's solved state
         self.combos = [copy.deepcopy(ts) for ts in base_combos]
         self.is_nonlinear = is_nonlinear
         self.load_steps = load_steps
@@ -19,7 +18,6 @@ class TrussOptimizer:
         self.max_deflection = max_deflection
         self.history = [] 
         
-        # Setup Grouping (Symmetry) based on the first combination's topology
         ref_ts = self.combos[0]
         if member_groups is None:
             self.member_groups = [[m.id] for m in ref_ts.members]
@@ -27,12 +25,25 @@ class TrussOptimizer:
             self.member_groups = member_groups
             
         self.num_groups = len(self.member_groups)
+        
+        # New: Shape Optimization setup
+        self.shape_bounds = shape_bounds if shape_bounds else {}
+        self.num_shape_vars = len(self.shape_bounds) * 3
+        
+        # Store original coordinates to apply relative shifts cleanly
+        self.base_coords = {}
+        for n in ref_ts.nodes:
+            self.base_coords[n.id] = (n.x, n.y, n.z)
 
-    def objective_function(self, group_indices):
-        """Evaluates structural weight and IS 800 penalties across the load envelope."""
+    def objective_function(self, xk):
+        """Evaluates MINLP fitness (Sizing + Shape)."""
         weight = 0.0
         
-        # 1. Fetch catalog properties for this specific AI candidate design
+        # Unpack the AI chromosome
+        group_indices = xk[:self.num_groups]
+        shape_vars = xk[self.num_groups:]
+        
+        # 1. Fetch catalog properties for sizing
         group_props = {}
         for group_idx, member_ids in enumerate(self.member_groups):
             cat_idx = int(round(group_indices[group_idx]))
@@ -40,20 +51,28 @@ class TrussOptimizer:
             r_min_m = self.catalog.loc[cat_idx, "r_min_m"]
             weight_kg_per_m = self.catalog.loc[cat_idx, "Weight_kg_m"]
             group_props[group_idx] = {'A': area_m2, 'r': r_min_m, 'w': weight_kg_per_m}
-            
-            # Calculate steel weight using just the reference geometry
-            for m_id in member_ids:
-                mbr = next((m for m in self.combos[0].members if m.id == m_id), None)
-                if mbr:
-                    weight += mbr.L * weight_kg_per_m
 
         max_nodal_disp = 0.0
-        # Initialize an envelope tracker for every member ID
         member_stresses = {m.id: {'tension': 0.0, 'compression': 0.0} for m in self.combos[0].members}
         
-        # 2. Solve ALL combinations to build the Envelope
+        # 2. Solve ALL combinations for this specific Shape + Sizing guess
         for ts in self.combos:
-            # Apply AI-selected cross-sections to this specific combination
+            # A) Apply Shape Shifts to Nodes
+            shape_idx = 0
+            for n_id in self.shape_bounds.keys():
+                dx = shape_vars[shape_idx]
+                dy = shape_vars[shape_idx+1]
+                dz = shape_vars[shape_idx+2]
+                shape_idx += 3
+                
+                node = next((n for n in ts.nodes if n.id == n_id), None)
+                if node:
+                    base_x, base_y, base_z = self.base_coords[n_id]
+                    node.x = base_x + dx
+                    node.y = base_y + dy
+                    node.z = base_z + dz
+            
+            # B) Apply Sizing and Update Geometry
             for group_idx, member_ids in enumerate(self.member_groups):
                 props = group_props[group_idx]
                 for m_id in member_ids:
@@ -61,9 +80,13 @@ class TrussOptimizer:
                     if mbr:
                         mbr.A = props['A']
                         mbr.r_min = props['r']
-                        mbr.k_global_matrix = (mbr.E * mbr.A / mbr.L) * np.outer(mbr.T_vector, mbr.T_vector)
+                        # CRITICAL: Recompute L, l, m, n based on shifted nodes
+                        try:
+                            mbr.update_geometry()
+                        except ValueError:
+                            return 1e12 # AI caused members to overlap/invert
             
-            # Solve the structural matrices
+            # C) Solve the Matrices
             try:
                 if self.is_nonlinear:
                     ts.solve_nonlinear(load_steps=self.load_steps)
@@ -72,30 +95,36 @@ class TrussOptimizer:
             except Exception:
                 return 1e12 # Mechanism penalty
                 
-            # Extract Max Displacements
+            # D) Extract Envelopes
             if ts.U_global is not None:
                 current_max_disp = np.max(np.abs(ts.U_global))
                 if current_max_disp > max_nodal_disp:
                     max_nodal_disp = current_max_disp
                     
-            # Extract Internal Forces into the Envelope
             for mbr in ts.members:
                 actual_stress = mbr.internal_force / mbr.A
-                if actual_stress > 0: # Tension
+                if actual_stress > 0: 
                     member_stresses[mbr.id]['tension'] = max(member_stresses[mbr.id]['tension'], actual_stress)
-                else: # Compression (Negative value)
+                else: 
                     member_stresses[mbr.id]['compression'] = min(member_stresses[mbr.id]['compression'], actual_stress)
 
-        # 3. Constraints & Penalties evaluated against the Peak Envelope
+        # 3. Calculate Weight based on the newly morphed lengths
+        ref_ts = self.combos[0]
+        for group_idx, member_ids in enumerate(self.member_groups):
+            w_per_m = group_props[group_idx]['w']
+            for m_id in member_ids:
+                mbr = next((m for m in ref_ts.members if m.id == m_id), None)
+                if mbr:
+                    weight += mbr.L * w_per_m
+
+        # 4. Constraints & Penalties
         penalty = 0.0
-        
         if max_nodal_disp > self.max_deflection:
             penalty += 1e9 * (max_nodal_disp / self.max_deflection)**2
             
         allowable_tens = self.yield_stress / 1.1 
         
-        # We can use the reference geometry to calculate buckling limits
-        for mbr in self.combos[0].members:
+        for mbr in ref_ts.members:
             peak_tension = member_stresses[mbr.id]['tension']
             peak_compression = abs(member_stresses[mbr.id]['compression'])
             
@@ -115,13 +144,20 @@ class TrussOptimizer:
     def optimize(self, pop_size=15, max_gen=100):
         self.history = [] 
         max_index = len(self.catalog) - 1
+        
+        # 1. Define Sizing Bounds
         bounds = [(0, max_index) for _ in range(self.num_groups)]
-        integrality = np.ones(self.num_groups)
+        integrality = [1] * self.num_groups # 1 means integer (discrete)
+        
+        # 2. Append Shape Bounds
+        for n_id, b in self.shape_bounds.items():
+            bounds.extend([(b[0], b[1]), (b[2], b[3]), (b[4], b[5])])
+            integrality.extend([0, 0, 0]) # 0 means float (continuous)
         
         result = differential_evolution(
             self.objective_function, 
             bounds, 
-            integrality=integrality,  
+            integrality=np.array(integrality),  
             strategy='best1bin', 
             popsize=pop_size, 
             maxiter=max_gen, 
@@ -132,8 +168,10 @@ class TrussOptimizer:
             disp=False 
         )
         
-        opt_indices = [int(round(idx)) for idx in result.x]
-        final_weight = self.objective_function(opt_indices) 
+        # Extract Results
+        opt_indices = [int(round(idx)) for idx in result.x[:self.num_groups]]
+        opt_shape = result.x[self.num_groups:]
+        final_weight = self.objective_function(result.x) 
         
         final_sections = {}
         for group_idx, member_ids in enumerate(self.member_groups):
@@ -142,5 +180,15 @@ class TrussOptimizer:
             for m_id in member_ids:
                 final_sections[m_id] = section_name
                 
+        final_node_shifts = {}
+        shape_idx = 0
+        for n_id in self.shape_bounds.keys():
+            final_node_shifts[n_id] = {
+                'dx': opt_shape[shape_idx],
+                'dy': opt_shape[shape_idx+1],
+                'dz': opt_shape[shape_idx+2]
+            }
+            shape_idx += 3
+                
         is_valid = final_weight < 1e6 
-        return final_sections, final_weight, is_valid, self.history
+        return final_sections, final_node_shifts, final_weight, is_valid, self.history
