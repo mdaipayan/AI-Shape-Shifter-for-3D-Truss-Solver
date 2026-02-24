@@ -36,7 +36,6 @@ class Member:
         dy = self.node_j.y - self.node_i.y
         dz = self.node_j.z - self.node_i.z
         self.L = np.sqrt(dx**2 + dy**2 + dz**2)
-        self.L_current = self.L # Initialize current length
         
         if self.L == 0:
             raise ValueError(f"Member {self.id} has zero length.")
@@ -64,7 +63,7 @@ class Member:
             [-self.l*self.n, -self.m*self.n, 1 - self.n**2]
         ])
         
-        KG_sub = (current_force / self.L_current) * Z
+        KG_sub = (current_force / self.L) * Z
         
         KG = np.zeros((6, 6))
         KG[0:3, 0:3] = KG_sub
@@ -181,7 +180,6 @@ class TrussSystem:
             member.u_local = np.array([self.U_global[dof] for dof in member.dofs])
             member.calculate_force()
 
-
     def solve_nonlinear(self, load_steps=10, tolerance=1e-5, max_iter=50):
         """Solves the system using the Incremental Newton-Raphson method for Geometric Non-Linearity."""
         num_dofs = 3 * len(self.nodes)
@@ -226,7 +224,7 @@ class TrussSystem:
                     m.l, m.m, m.n = dx/m.L_current, dy/m.L_current, dz/m.L_current
                     m.T_vector = np.array([-m.l, -m.m, -m.n, m.l, m.m, m.n])
                     
-                    # Recalculate K_E and K_G using current length
+                    # Recalculate K_E and K_G
                     KE = (m.E * m.A / m.L) * np.outer(m.T_vector, m.T_vector) 
                     KG = m.get_k_geometric(member_forces[m.id])
                     K_element = KE + KG
@@ -236,12 +234,9 @@ class TrussSystem:
                         for j in range(6):
                             K_T[m.dofs[i], m.dofs[j]] += K_element[i, j]
                             
-                    # Calculate internal forces using exact physical stretch
+                    # Calculate internal forces using exact physical stretch (FIXED)
                     m.u_local = np.array([self.U_global[dof] for dof in m.dofs])
-                    
-                    # True stretch formulation for large displacements
                     force = (m.E * m.A / m.L) * (m.L_current - m.L) 
-                    
                     member_forces[m.id] = force
                     
                     # Map element internal forces to global internal force vector
