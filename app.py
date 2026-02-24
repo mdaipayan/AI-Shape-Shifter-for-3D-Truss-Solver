@@ -38,19 +38,21 @@ fig = go.Figure()
 def clear_results():
     if 'solved_truss' in st.session_state:
         del st.session_state['solved_truss']
+    if 'solved_combos' in st.session_state:
+        del st.session_state['solved_combos']
     if 'report_data' in st.session_state:
         del st.session_state['report_data']
     if 'optimized_sections' in st.session_state:
         del st.session_state['optimized_sections']
 
 # ---------------------------------------------------------
-# CACHED SOLVER ENGINE
+# CACHED SOLVER ENGINE (UPDATED FOR LOAD COMBINATIONS)
 # ---------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def run_structural_analysis(n_df, m_df, l_df, a_type, l_steps):
+def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
     """
-    Cached wrapper for parsing dataframes and executing the matrix solver.
-    Re-runs ONLY if the input dataframes or solver settings change.
+    Cached wrapper for parsing dataframes and executing the matrix solver 
+    for a specific load combination.
     """
     ts = TrussSystem()
     node_map = {}
@@ -81,7 +83,7 @@ def run_structural_analysis(n_df, m_df, l_df, a_type, l_steps):
         A = float(row.get('Area(sq.m)', 0.01)) if not pd.isna(row.get('Area(sq.m)')) else 0.01
         ts.members.append(Member(i+1, node_map[ni_val], node_map[nj_val], E, A))
         
-    # 3. Parse Loads
+    # 3. Parse Loads with Combination Factors
     for i, row in l_df.iterrows():
         if pd.isna(row.get('Node_ID')): continue
         node_id_val = int(row['Node_ID'])
@@ -90,9 +92,15 @@ def run_structural_analysis(n_df, m_df, l_df, a_type, l_steps):
             raise ValueError(f"Load at row {i+1} references an invalid Node ID.")
             
         target_node = node_map[node_id_val]
-        fx = float(row.get('Force_X (N)', 0)) if not pd.isna(row.get('Force_X (N)')) else 0.0
-        fy = float(row.get('Force_Y (N)', 0)) if not pd.isna(row.get('Force_Y (N)')) else 0.0
-        fz = float(row.get('Force_Z (N)', 0)) if not pd.isna(row.get('Force_Z (N)')) else 0.0
+        
+        # Determine the factor for this specific load case
+        case_name = str(row.get('Load_Case', 'DL')).strip()
+        factor_col = f"Factor_{case_name}"
+        factor = float(combo_factors.get(factor_col, 1.0)) # Default to 1.0 if factor isn't defined
+        
+        fx = float(row.get('Force_X (N)', 0)) * factor
+        fy = float(row.get('Force_Y (N)', 0)) * factor
+        fz = float(row.get('Force_Z (N)', 0)) * factor
         
         dof_x, dof_y, dof_z = target_node.dofs[0], target_node.dofs[1], target_node.dofs[2]
         
@@ -139,8 +147,12 @@ with col1:
             ], columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
             
             st.session_state['loads_data'] = pd.DataFrame([
-                [4, 0.0, 50000.0, -100000.0]  
-            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
+                [4, 0.0, 50000.0, -100000.0, "DL"]  
+            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+            
+            st.session_state['combos_data'] = pd.DataFrame([
+                ["Standard Combination", 1.0]
+            ], columns=["Combo_Name", "Factor_DL"])
             
             st.session_state['group_input_val'] = "1, 2, 3; 4, 5, 6"
             clear_results()
@@ -166,24 +178,26 @@ with col1:
             ], columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
             
             st.session_state['loads_data'] = pd.DataFrame([
-                [1, 10000.0, 50000.0, -50000.0], [2, 0.0, 50000.0, -50000.0],
-                [3, 10000.0, 0.0, 0.0], [6, 10000.0, 0.0, 0.0]
-            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
+                [1, 10000.0, 50000.0, -50000.0, "DL"], [2, 0.0, 50000.0, -50000.0, "DL"],
+                [3, 10000.0, 0.0, 0.0, "WL"], [6, 10000.0, 0.0, 0.0, "WL"]
+            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+            
+            st.session_state['combos_data'] = pd.DataFrame([
+                ["Gravity (1.5DL)", 1.5, 0.0],
+                ["Extreme Combo (1.2DL + 1.2WL)", 1.2, 1.2]
+            ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
             
             st.session_state['group_input_val'] = "1; 2, 3, 4, 5; 6, 7, 8, 9; 10, 11; 12, 13; 14, 15, 16, 17; 18, 19, 20, 21; 22, 23, 24, 25"
             clear_results()
 
     with col_btn3:
         if st.button("🏗️ Load 72-Bar"):
-            # Parametric Generation of the 72-Bar Truss
             nodes = []
-            # Base nodes (Level 0) - Fixed
             nodes.append([-1.5, 1.5, 0.0, 1, 1, 1])
             nodes.append([1.5, 1.5, 0.0, 1, 1, 1])
             nodes.append([1.5, -1.5, 0.0, 1, 1, 1])
             nodes.append([-1.5, -1.5, 0.0, 1, 1, 1])
             
-            # Levels 1 to 4
             for i in range(1, 5):
                 z = i * 1.5
                 nodes.append([-1.5, 1.5, z, 0, 0, 0])
@@ -192,14 +206,12 @@ with col1:
                 nodes.append([-1.5, -1.5, z, 0, 0, 0])
             st.session_state['nodes_data'] = pd.DataFrame(nodes, columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
             
-            members = []
-            groups = []
+            members, groups = [], []
             member_id = 1
             for t in range(4):
                 B1, B2, B3, B4 = t*4+1, t*4+2, t*4+3, t*4+4
                 T1, T2, T3, T4 = t*4+5, t*4+6, t*4+7, t*4+8
                 
-                # Verticals
                 v_group = []
                 for b, top in [(B1, T1), (B2, T2), (B3, T3), (B4, T4)]:
                     members.append([b, top, 0.005, 2e11])
@@ -207,7 +219,6 @@ with col1:
                     member_id += 1
                 groups.append(", ".join(v_group))
                 
-                # Horizontals
                 h_group = []
                 for n1, n2 in [(T1, T2), (T2, T3), (T3, T4), (T4, T1)]:
                     members.append([n1, n2, 0.005, 2e11])
@@ -215,7 +226,6 @@ with col1:
                     member_id += 1
                 groups.append(", ".join(h_group))
                 
-                # Face Diagonals
                 fd_group = []
                 for n1, n2 in [(B1, T2), (B2, T1), (B2, T3), (B3, T2), (B3, T4), (B4, T3), (B4, T1), (B1, T4)]:
                     members.append([n1, n2, 0.005, 2e11])
@@ -223,7 +233,6 @@ with col1:
                     member_id += 1
                 groups.append(", ".join(fd_group))
                 
-                # Plan Diagonals
                 pd_group = []
                 for n1, n2 in [(T1, T3), (T2, T4)]:
                     members.append([n1, n2, 0.005, 2e11])
@@ -233,13 +242,18 @@ with col1:
                 
             st.session_state['members_data'] = pd.DataFrame(members, columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
             
-            # Apply standard asymmetric loading at the top nodes
             st.session_state['loads_data'] = pd.DataFrame([
-                [17, 50000.0, 50000.0, -25000.0],
-                [18, 0.0, 0.0, -25000.0],
-                [19, 0.0, 0.0, -25000.0],
-                [20, 0.0, 0.0, -25000.0]
-            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
+                [17, 50000.0, 50000.0, -25000.0, "WL"],
+                [18, 0.0, 0.0, -25000.0, "DL"],
+                [19, 0.0, 0.0, -25000.0, "DL"],
+                [20, 0.0, 0.0, -25000.0, "DL"]
+            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+            
+            st.session_state['combos_data'] = pd.DataFrame([
+                ["Serviceability (1.0DL + 1.0WL)", 1.0, 1.0],
+                ["Ultimate (1.5DL + 1.5WL)", 1.5, 1.5],
+                ["Dead Load Only (1.5DL)", 1.5, 0.0]
+            ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
             
             st.session_state['group_input_val'] = "; ".join(groups)
             clear_results()
@@ -247,7 +261,11 @@ with col1:
     if 'nodes_data' not in st.session_state:
         st.session_state['nodes_data'] = pd.DataFrame(columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
         st.session_state['members_data'] = pd.DataFrame(columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
-        st.session_state['loads_data'] = pd.DataFrame(columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)"])
+        st.session_state['loads_data'] = pd.DataFrame(columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+        st.session_state['combos_data'] = pd.DataFrame([
+            ["Serviceability (1.0DL + 1.0LL)", 1.0, 1.0],
+            ["Ultimate Limit State (1.5DL + 1.5LL)", 1.5, 1.5]
+        ], columns=["Combo_Name", "Factor_DL", "Factor_LL"])
 
     st.subheader("Nodes")
     node_df = st.data_editor(st.session_state['nodes_data'], num_rows="dynamic", key="nodes", on_change=clear_results)
@@ -255,8 +273,13 @@ with col1:
     st.subheader("Members")
     member_df = st.data_editor(st.session_state['members_data'], num_rows="dynamic", key="members", on_change=clear_results)
 
-    st.subheader("Nodal Loads")
+    st.subheader("Nodal Loads (Base Cases)")
+    st.info("Assign a string like 'DL', 'LL', or 'WL' to the Load_Case column.")
     load_df = st.data_editor(st.session_state['loads_data'], num_rows="dynamic", key="loads", on_change=clear_results)
+
+    st.subheader("Load Combinations")
+    st.info("Define multiplication factors. Column names must match `Factor_[Load_Case]` exactly.")
+    combo_df = st.data_editor(st.session_state['combos_data'], num_rows="dynamic", key="combos", on_change=clear_results)
 
     st.markdown("---")
     st.subheader("⚙️ Solver Settings")
@@ -279,15 +302,24 @@ with col1:
     
     if st.button("Calculate Results"):
         try:
-            if analysis_type == "Non-Linear (Geometric P-Δ)":
-                with st.spinner(f"Running Non-Linear Newton-Raphson across {load_steps} increments..."):
-                    ts = run_structural_analysis(node_df, member_df, load_df, analysis_type, load_steps)
-            else:
-                with st.spinner("Assembling and Inverting Global Matrix..."):
-                    ts = run_structural_analysis(node_df, member_df, load_df, analysis_type, load_steps)
+            solved_combos = {}
+            
+            # Loop through the combinations table
+            for idx, combo_row in combo_df.iterrows():
+                combo_name = str(combo_row['Combo_Name'])
+                combo_factors = combo_row.to_dict() # e.g., {'Combo_Name': 'Ult', 'Factor_DL': 1.5, ...}
+                
+                with st.spinner(f"Solving {combo_name}..."):
+                    ts = run_structural_analysis(node_df, member_df, load_df, combo_factors, analysis_type, load_steps)
+                    solved_combos[combo_name] = ts
                     
-            st.session_state['solved_truss'] = ts
-            st.success(f"Analysis Complete using {analysis_type}!")
+            st.session_state['solved_combos'] = solved_combos
+            
+            # For backward compatibility, set a default active truss
+            if solved_combos:
+                st.session_state['solved_truss'] = list(solved_combos.values())[0] 
+            
+            st.success(f"Successfully analyzed {len(solved_combos)} load combinations!")
             
         except Exception as e:
             st.error(f"Error: {e}")
@@ -308,7 +340,6 @@ with col1:
     st.markdown("**Symmetry & Constructability (Member Grouping)**")
     st.caption("Enter comma-separated Member IDs to group them into identical sections. Separate groups with a semicolon (;).")
     
-    # Text input mapped to session state
     grouping_input = st.text_input("Member Groups", key="group_input_val")
         
     if st.button("🚀 Run Discrete AI Optimization"):
@@ -337,7 +368,6 @@ with col1:
                             max_deflection=max_deflection_mm / 1000.0 
                         )
                         
-                        # NEW: Unpacking the 4th variable (history)
                         final_sections, final_weight, is_valid, history = optimizer.optimize(pop_size=20, max_gen=100) 
                         
                         if is_valid:
@@ -355,34 +385,22 @@ with col1:
                                 delta_color="inverse"
                             )
                             
-                            # ---------------------------------------------------
-                            # NEW: Plot the Academic Convergence Curve
-                            # ---------------------------------------------------
                             st.markdown("### 📈 Evolutionary Convergence Curve")
                             st.caption("Validates algorithmic stability by tracking weight reduction across generations.")
                             
-                            # Filter out massive penalty values from early random generations
                             clean_hist = [w for w in history if w < 1e6]
                             
                             if clean_hist:
                                 fig_conv = go.Figure()
                                 fig_conv.add_trace(go.Scatter(
-                                    y=clean_hist,
-                                    mode='lines+markers',
-                                    name='Best Feasible Weight',
-                                    line=dict(color='forestgreen', width=3),
-                                    marker=dict(size=6, color='black')
+                                    y=clean_hist, mode='lines+markers', name='Best Feasible Weight',
+                                    line=dict(color='forestgreen', width=3), marker=dict(size=6, color='black')
                                 ))
                                 fig_conv.update_layout(
-                                    xaxis_title="Generation (Epoch)",
-                                    yaxis_title="Structural Weight (kg)",
-                                    margin=dict(l=0, r=0, t=10, b=0),
-                                    height=350,
-                                    plot_bgcolor="rgba(240, 240, 240, 0.5)"
+                                    xaxis_title="Generation (Epoch)", yaxis_title="Structural Weight (kg)",
+                                    margin=dict(l=0, r=0, t=10, b=0), height=350, plot_bgcolor="rgba(240, 240, 240, 0.5)"
                                 )
                                 st.plotly_chart(fig_conv, use_container_width=True)
-                            
-                            # ---------------------------------------------------
                             
                             results_df = pd.DataFrame({
                                 "Member": [f"M{mbr.id}" for mbr in base_ts.members],
@@ -406,18 +424,16 @@ with col1:
                 m_id = i + 1
                 if m_id in st.session_state['optimized_sections']:
                     sec_name = st.session_state['optimized_sections'][m_id]
-                    # Fetch the corresponding area in m^2 from the catalog
                     area_m2 = catalog[catalog['Designation'] == sec_name]['Area_m2'].values[0]
                     df_m.at[i, 'Area(sq.m)'] = area_m2
             
-            # Save it back to the state and force a UI refresh
             st.session_state['members_data'] = df_m
             clear_results()
             st.success("Model updated! Scroll up and click 'Calculate Results' to view the new force distribution.")
             st.rerun()
 
     # ---------------------------------------------------------
-    # NEW SECTION: PROFESSIONAL PDF REPORT GENERATION
+    # PROFESSIONAL PDF REPORT GENERATION
     # ---------------------------------------------------------
     st.markdown("---")
     st.subheader("📄 Export Documentation")
@@ -432,10 +448,8 @@ with col1:
                     fig_base_img = st.session_state.get('base_fig', None)
                     fig_res_img = st.session_state.get('current_fig', None)
                     
-                    # Package AI data if optimization was run
                     opt_payload = None
                     if 'optimized_sections' in st.session_state:
-                        # Recalculate weights quickly for the report
                         orig_w = sum([mbr.A * mbr.L * 7850 for mbr in base_ts.members])
                         from is_catalog import get_isa_catalog
                         cat = get_isa_catalog()
@@ -454,22 +468,16 @@ with col1:
                             'final_weight': final_w
                         }
                     
-                    # Call the LaTeX compiler
                     pdf_bytes = generate_pdf_report(
-                        ts_solved=base_ts, 
-                        opt_data=opt_payload,
-                        fig_base=fig_base_img, 
-                        fig_res=fig_res_img,
-                        scale_factor=current_scale, 
-                        unit_label=current_unit
+                        ts_solved=base_ts, opt_data=opt_payload,
+                        fig_base=fig_base_img, fig_res=fig_res_img,
+                        scale_factor=current_scale, unit_label=current_unit
                     )
                     
                     st.download_button(
                         label="⬇️ Download PDF Report",
-                        data=pdf_bytes,
-                        file_name=f"Truss_Analysis_Report_{datetime.date.today().strftime('%Y%m%d')}.pdf",
-                        mime="application/pdf",
-                        type="primary"
+                        data=pdf_bytes, file_name=f"Truss_Analysis_Report_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf", type="primary"
                     )
                 except Exception as e:
                     st.error(f"Failed to generate PDF: {e}")
@@ -491,9 +499,13 @@ with col2:
             st.plotly_chart(fig_base, use_container_width=True)
 
     with tab2:
-        if 'solved_truss' in st.session_state:
-            ts = st.session_state['solved_truss']
-            fig_res = draw_results_fbd(ts, scale_factor=current_scale, unit_label=current_unit)
+        if 'solved_combos' in st.session_state and st.session_state['solved_combos']:
+            combo_names = list(st.session_state['solved_combos'].keys())
+            selected_combo_vis = st.selectbox("👁️ View Results for Load Combination:", combo_names)
+            
+            ts_to_view = st.session_state['solved_combos'][selected_combo_vis]
+            
+            fig_res = draw_results_fbd(ts_to_view, scale_factor=current_scale, unit_label=current_unit)
             st.session_state['current_fig'] = fig_res 
             st.plotly_chart(fig_res, use_container_width=True)
         else:
@@ -502,11 +514,15 @@ with col2:
 # ---------------------------------------------------------
 # NEW SECTION: THE "GLASS BOX" PEDAGOGICAL EXPLORER (3D)
 # ---------------------------------------------------------
-if 'solved_truss' in st.session_state:
+if 'solved_combos' in st.session_state and st.session_state['solved_combos']:
     st.markdown("---")
     st.header("🎓 Educational Glass-Box: 3D DSM Intermediate Steps")
     
-    ts = st.session_state['solved_truss']
+    # Let the user select which combination to inspect mathematically
+    combo_names = list(st.session_state['solved_combos'].keys())
+    selected_combo_gb = st.selectbox("📐 Inspect Matrix Math for Load Combination:", combo_names, key="gb_selector")
+    ts = st.session_state['solved_combos'][selected_combo_gb]
+    
     gb_tab1, gb_tab2, gb_tab3 = st.tabs(["📐 1. 3D Kinematics & Stiffness", "🧩 2. Global Assembly", "🚀 3. Displacements & Internal Forces"])
     
     with gb_tab1:
