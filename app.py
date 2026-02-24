@@ -7,12 +7,40 @@ from ai_optimizer import TrussOptimizer
 from is_catalog import get_isa_catalog
 import datetime
 import os
-from visualizer import draw_undeformed_geometry, draw_results_fbd
 import json
+from visualizer import draw_undeformed_geometry, draw_results_fbd
 
 st.set_page_config(page_title="Professional Truss Suite (3D)", layout="wide")
 st.title("🏗️ Professional Space Truss Analysis Developed by D Mandal")
 
+# ---------------------------------------------------------
+# 1. INITIALIZE SESSION STATE (MUST BE AT THE TOP)
+# ---------------------------------------------------------
+if 'nodes_data' not in st.session_state:
+    st.session_state['nodes_data'] = pd.DataFrame(columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
+    st.session_state['members_data'] = pd.DataFrame(columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
+    st.session_state['loads_data'] = pd.DataFrame(columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+    st.session_state['combos_data'] = pd.DataFrame([
+        ["Serviceability (1.0DL + 1.0LL)", 1.0, 1.0],
+        ["Ultimate Limit State (1.5DL + 1.5LL)", 1.5, 1.5]
+    ], columns=["Combo_Name", "Factor_DL", "Factor_LL"])
+    
+if 'group_input_val' not in st.session_state:
+    st.session_state['group_input_val'] = "1, 2, 3; 4, 5, 6"
+
+def clear_results():
+    if 'solved_truss' in st.session_state:
+        del st.session_state['solved_truss']
+    if 'solved_combos' in st.session_state:
+        del st.session_state['solved_combos']
+    if 'report_data' in st.session_state:
+        del st.session_state['report_data']
+    if 'optimized_sections' in st.session_state:
+        del st.session_state['optimized_sections']
+
+# ---------------------------------------------------------
+# 2. SIDEBAR & SETTINGS
+# ---------------------------------------------------------
 st.sidebar.header("⚙️ Display Settings")
 st.sidebar.info("The solver engine calculates using base SI units (Newtons, meters). Use this setting to scale the visual output on the diagrams.")
 
@@ -33,13 +61,13 @@ st.sidebar.markdown("---")
 if st.sidebar.button("🗑️ Clear Cache"):
     st.cache_data.clear()
     st.sidebar.success("Memory Cache Cleared!")
+
 # ---------------------------------------------------------
 # SAVE / LOAD PROJECT (JSON)
 # ---------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("💾 Project Management")
 
-# 1. Export Data Logic
 def export_project():
     project_data = {
         "nodes": st.session_state['nodes_data'].to_dict(orient='records'),
@@ -57,54 +85,35 @@ st.sidebar.download_button(
     mime="application/json"
 )
 
-# 2. Import Data Logic
 uploaded_file = st.sidebar.file_uploader("⬆️ Load Project (.json)", type=["json"])
 if uploaded_file is not None:
     try:
         project_data = json.load(uploaded_file)
         
-        # Overwrite session state with uploaded data
         st.session_state['nodes_data'] = pd.DataFrame(project_data['nodes'])
         st.session_state['members_data'] = pd.DataFrame(project_data['members'])
         st.session_state['loads_data'] = pd.DataFrame(project_data['loads'])
         st.session_state['combos_data'] = pd.DataFrame(project_data['combos'])
         st.session_state['group_input_val'] = project_data.get('groups', "")
         
-        clear_results() # Wipe any old analysis from memory
+        clear_results() 
         st.sidebar.success("Project Loaded Successfully!")
         
-        # Give the user a button to refresh the UI with the new data
         if st.sidebar.button("🔄 Refresh UI to View Loaded Data"):
             st.rerun()
             
     except Exception as e:
         st.sidebar.error(f"Error parsing file: {e}")
-fig = go.Figure()
-
-def clear_results():
-    if 'solved_truss' in st.session_state:
-        del st.session_state['solved_truss']
-    if 'solved_combos' in st.session_state:
-        del st.session_state['solved_combos']
-    if 'report_data' in st.session_state:
-        del st.session_state['report_data']
-    if 'optimized_sections' in st.session_state:
-        del st.session_state['optimized_sections']
 
 # ---------------------------------------------------------
-# CACHED SOLVER ENGINE (UPDATED FOR LOAD COMBINATIONS)
+# CACHED SOLVER ENGINE
 # ---------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
-    """
-    Cached wrapper for parsing dataframes and executing the matrix solver 
-    for a specific load combination.
-    """
     ts = TrussSystem()
     node_map = {}
     valid_node_count = 0
     
-    # 1. Parse Nodes
     for i, row in n_df.iterrows():
         if pd.isna(row.get('X')) or pd.isna(row.get('Y')) or pd.isna(row.get('Z')): continue
         valid_node_count += 1
@@ -117,7 +126,6 @@ def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
         ts.nodes.append(n)
         node_map[i + 1] = n 
         
-    # 2. Parse Members
     for i, row in m_df.iterrows():
         if pd.isna(row.get('Node_I')) or pd.isna(row.get('Node_J')): continue
         ni_val, nj_val = int(row['Node_I']), int(row['Node_J'])
@@ -129,7 +137,6 @@ def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
         A = float(row.get('Area(sq.m)', 0.01)) if not pd.isna(row.get('Area(sq.m)')) else 0.01
         ts.members.append(Member(i+1, node_map[ni_val], node_map[nj_val], E, A))
         
-    # 3. Parse Loads with Combination Factors
     for i, row in l_df.iterrows():
         if pd.isna(row.get('Node_ID')): continue
         node_id_val = int(row['Node_ID'])
@@ -139,10 +146,9 @@ def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
             
         target_node = node_map[node_id_val]
         
-        # Determine the factor for this specific load case
         case_name = str(row.get('Load_Case', 'DL')).strip()
         factor_col = f"Factor_{case_name}"
-        factor = float(combo_factors.get(factor_col, 1.0)) # Default to 1.0 if factor isn't defined
+        factor = float(combo_factors.get(factor_col, 1.0)) 
         
         fx = float(row.get('Force_X (N)', 0)) * factor
         fy = float(row.get('Force_Y (N)', 0)) * factor
@@ -157,7 +163,6 @@ def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
     if not ts.nodes or not ts.members:
         raise ValueError("Incomplete model: Please define at least two valid nodes and one member.")
         
-    # 4. Solve
     if a_type == "Linear Elastic (Standard)":
         ts.solve()
     else:
@@ -165,17 +170,15 @@ def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
             
     return ts
 
-# Initialize dynamic grouping text box state
-if 'group_input_val' not in st.session_state:
-    st.session_state['group_input_val'] = "1, 2, 3; 4, 5, 6"
-
+# ---------------------------------------------------------
+# 3. MAIN UI LAYOUT
+# ---------------------------------------------------------
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.header("1. Input Data")
     
     st.info("💡 **Benchmark Library:** Load standard geometries to test the solver and AI.")
-    
     col_btn1, col_btn2, col_btn3 = st.columns(3)
     
     with col_btn1:
@@ -304,15 +307,6 @@ with col1:
             st.session_state['group_input_val'] = "; ".join(groups)
             clear_results()
 
-    if 'nodes_data' not in st.session_state:
-        st.session_state['nodes_data'] = pd.DataFrame(columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
-        st.session_state['members_data'] = pd.DataFrame(columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
-        st.session_state['loads_data'] = pd.DataFrame(columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
-        st.session_state['combos_data'] = pd.DataFrame([
-            ["Serviceability (1.0DL + 1.0LL)", 1.0, 1.0],
-            ["Ultimate Limit State (1.5DL + 1.5LL)", 1.5, 1.5]
-        ], columns=["Combo_Name", "Factor_DL", "Factor_LL"])
-
     st.subheader("Nodes")
     node_df = st.data_editor(st.session_state['nodes_data'], num_rows="dynamic", key="nodes", on_change=clear_results)
 
@@ -350,10 +344,9 @@ with col1:
         try:
             solved_combos = {}
             
-            # Loop through the combinations table
             for idx, combo_row in combo_df.iterrows():
                 combo_name = str(combo_row['Combo_Name'])
-                combo_factors = combo_row.to_dict() # e.g., {'Combo_Name': 'Ult', 'Factor_DL': 1.5, ...}
+                combo_factors = combo_row.to_dict() 
                 
                 with st.spinner(f"Solving {combo_name}..."):
                     ts = run_structural_analysis(node_df, member_df, load_df, combo_factors, analysis_type, load_steps)
@@ -361,7 +354,6 @@ with col1:
                     
             st.session_state['solved_combos'] = solved_combos
             
-            # For backward compatibility, set a default active truss
             if solved_combos:
                 st.session_state['solved_truss'] = list(solved_combos.values())[0] 
             
@@ -371,7 +363,7 @@ with col1:
             st.error(f"Error: {e}")
 
     # ---------------------------------------------------------
-    # NEW SECTION: IS 800 DISCRETE AI SIZE OPTIMIZATION
+    # IS 800 DISCRETE AI SIZE OPTIMIZATION
     # ---------------------------------------------------------
     st.markdown("---")
     st.subheader("🧠 IS 800 Discrete AI Optimization")
@@ -386,7 +378,7 @@ with col1:
     st.markdown("**Symmetry & Constructability (Member Grouping)**")
     st.caption("Enter comma-separated Member IDs to group them into identical sections. Separate groups with a semicolon (;).")
     
-    grouping_input = st.text_input("Member Groups", key="group_input_val")
+    grouping_input = st.text_input("Member Groups", value=st.session_state.get('group_input_val', "1"), key="group_input_val", on_change=clear_results)
         
     if st.button("🚀 Run Discrete AI Optimization"):
         if 'solved_truss' not in st.session_state:
@@ -407,7 +399,6 @@ with col1:
                     base_ts = st.session_state['solved_truss']
                     
                     try:
-                        # Fetch the dictionary of all solved combinations
                         solved_combos_dict = st.session_state['solved_combos']
                         optimizer = TrussOptimizer(
                             base_combos=list(solved_combos_dict.values()), 
@@ -568,7 +559,6 @@ if 'solved_combos' in st.session_state and st.session_state['solved_combos']:
     st.markdown("---")
     st.header("🎓 Educational Glass-Box: 3D DSM Intermediate Steps")
     
-    # Let the user select which combination to inspect mathematically
     combo_names = list(st.session_state['solved_combos'].keys())
     selected_combo_gb = st.selectbox("📐 Inspect Matrix Math for Load Combination:", combo_names, key="gb_selector")
     ts = st.session_state['solved_combos'][selected_combo_gb]
