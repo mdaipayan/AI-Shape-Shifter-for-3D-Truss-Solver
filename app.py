@@ -489,11 +489,39 @@ with col1:
                             st.dataframe(results_df)
                             
                             # Display Shape Results
-                            if final_node_shifts:
+                           # Display Shape Results & Generate Paper Data
+                           if final_node_shifts:
                                 st.markdown("#### Shape Output (Node Coordinate Shifts)")
-                                shape_res_df = pd.DataFrame.from_dict(final_node_shifts, orient='index')
-                                shape_res_df.index.name = "Node_ID"
-                                st.dataframe(shape_res_df.style.format("{:.3f}"))
+                                
+                                shape_data = []
+                                latex_str = "COPY THIS INTO YOUR LATEX TABLE 1 (PART B):\n"
+                                latex_str += "-"*45 + "\n"
+                                
+                                for n_id, shifts in final_node_shifts.items():
+                                    node = next((n for n in base_ts.nodes if n.id == n_id), None)
+                                    if node:
+                                        fx, fy, fz = node.x + shifts['dx'], node.y + shifts['dy'], node.z + shifts['dz']
+                                        shape_data.append({
+                                            "Node_ID": n_id,
+                                            "Base_X": node.x, "Base_Y": node.y, "Base_Z": node.z,
+                                            "Shift_X": shifts['dx'], "Shift_Y": shifts['dy'], "Shift_Z": shifts['dz'],
+                                            "Final_X": fx, "Final_Y": fy, "Final_Z": fz
+                                        })
+                                        latex_str += f"Node {n_id} Shifts -> dX: {shifts['dx']:+.4f} m | dY: {shifts['dy']:+.4f} m | dZ: {shifts['dz']:+.4f} m\n"
+                                        latex_str += f"Node {n_id} Final  ->  X: {fx:+.4f} m |  Y: {fy:+.4f} m |  Z: {fz:+.4f} m\n\n"
+                                
+                                # Render the comprehensive dataframe
+                                shape_res_df = pd.DataFrame(shape_data).set_index("Node_ID")
+                                st.dataframe(shape_res_df.style.format("{:.4f}"))
+                                
+                                # Render the LaTeX copy-paste box
+                                st.code(latex_str, language="text")
+                                
+                                # Render Figure 3 for the paper
+                                st.markdown("#### 📐 Figure 3: Shape Optimization Overlay")
+                                st.caption("Save this diagram as a PNG for your journal manuscript submission.")
+                                fig_overlay = draw_shape_optimization_overlay(base_ts, final_node_shifts)
+                                st.plotly_chart(fig_overlay, use_container_width=True)
                                 
                         else:
                             st.error("❌ Optimizer failed to find ANY sizing/shape combination that satisfies the IS 800 constraints.")
