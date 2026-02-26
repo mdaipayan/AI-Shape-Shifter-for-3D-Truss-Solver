@@ -116,13 +116,14 @@ def generate_pdf_report(ts_solved, opt_data=None, fig_base=None, fig_res=None, s
     if opt_data and 'sections' in opt_data:
         pdf.add_page()
         pdf.set_font('helvetica', 'B', 14)
-        pdf.cell(0, 10, '3. IS 800 Discrete AI Optimization', ln=True)
+        pdf.cell(0, 10, '3. AI Optimization (MINLP Shape & Sizing)', ln=True)
         
         orig_wt = opt_data.get('orig_weight', 0)
         final_wt = opt_data.get('final_weight', 0)
         saved = orig_wt - final_wt
         pct = (saved / orig_wt * 100) if orig_wt > 0 else 0
         
+        # 3.1 Optimization Metrics
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 10, '3.1 Optimization Metrics', ln=True)
         pdf.set_font('helvetica', '', 11)
@@ -131,6 +132,7 @@ def generate_pdf_report(ts_solved, opt_data=None, fig_base=None, fig_res=None, s
         pdf.cell(0, 8, f"- Material Saved: {saved:.2f} kg ({pct:.1f}%)", ln=True)
         pdf.ln(5)
         
+        # 3.2 Sizing Output
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 10, '3.2 Final IS 800 Assigned Sections', ln=True)
         
@@ -145,6 +147,35 @@ def generate_pdf_report(ts_solved, opt_data=None, fig_base=None, fig_res=None, s
             pdf.cell(col_widths[0], 8, f"M{m_id}", border=1, align='C')
             pdf.cell(col_widths[1], 8, sec, border=1, align='C')
             pdf.ln()
+            
+        pdf.ln(5)
 
-    # FIX: Output to raw bytes for Streamlit download (un-indented)
+        # 3.3 Shape Output (If present)
+        if 'node_shifts' in opt_data and opt_data['node_shifts']:
+            pdf.set_font('helvetica', 'B', 12)
+            pdf.cell(0, 10, '3.3 Optimized Shape Coordinates', ln=True)
+            
+            pdf.set_font('helvetica', 'B', 10)
+            col_w = [30, 40, 40, 40]
+            headers = ['Node ID', 'Final X (m)', 'Final Y (m)', 'Final Z (m)']
+            for i, h in enumerate(headers):
+                pdf.cell(col_w[i], 8, h, border=1, align='C')
+            pdf.ln()
+            
+            pdf.set_font('helvetica', '', 10)
+            for n_id, shifts in opt_data['node_shifts'].items():
+                node = next((n for n in ts_solved.nodes if n.id == n_id), None)
+                if node:
+                    # ts_solved currently holds the OLD coordinates. Add the shifts to get final.
+                    final_x = node.x + shifts['dx']
+                    final_y = node.y + shifts['dy']
+                    final_z = node.z + shifts['dz']
+                    
+                    pdf.cell(col_w[0], 8, str(n_id), border=1, align='C')
+                    pdf.cell(col_w[1], 8, f"{final_x:+.3f}", border=1, align='C')
+                    pdf.cell(col_w[2], 8, f"{final_y:+.3f}", border=1, align='C')
+                    pdf.cell(col_w[3], 8, f"{final_z:+.3f}", border=1, align='C')
+                    pdf.ln()
+
+    # Output to raw bytes for Streamlit download
     return bytes(pdf.output())
