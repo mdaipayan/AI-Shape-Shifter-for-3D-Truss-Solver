@@ -8,8 +8,7 @@ from is_catalog import get_isa_catalog
 import datetime
 import os
 import json
-from visualizer import draw_undeformed_geometry, draw_results_fbd
-
+from visualizer import draw_undeformed_geometry, draw_results_fbd, draw_shape_optimization_overlay
 st.set_page_config(page_title="Professional Truss Suite (3D)", layout="wide")
 st.title("🏗️ Professional Space Truss Analysis Developed by D Mandal")
 
