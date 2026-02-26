@@ -155,3 +155,66 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
         height=600
     )
     return fig_res
+
+def draw_shape_optimization_overlay(ts, shifts):
+    """Generates Figure 3 for the paper: 3D overlay of original vs optimized shape."""
+    fig = go.Figure()
+    
+    # 1. Original Nodes & Members (Faded Gray)
+    nx_base, ny_base, nz_base = [], [], []
+    for n in ts.nodes:
+        nx_base.append(n.x)
+        ny_base.append(n.y)
+        nz_base.append(n.z)
+        
+    fig.add_trace(go.Scatter3d(
+        x=nx_base, y=ny_base, z=nz_base, mode='markers',
+        marker=dict(size=4, color='lightgray'), name='Original Nodes'
+    ))
+    
+    for m in ts.members:
+        fig.add_trace(go.Scatter3d(
+            x=[m.node_i.x, m.node_j.x], y=[m.node_i.y, m.node_j.y], z=[m.node_i.z, m.node_j.z],
+            mode='lines', line=dict(color='lightgray', width=2, dash='dot'), showlegend=False
+        ))
+        
+    # 2. Shifted Nodes & Members (Blue & Red)
+    nx_opt, ny_opt, nz_opt = [], [], []
+    shifted_nodes = {}
+    for n in ts.nodes:
+        dx = shifts[n.id]['dx'] if n.id in shifts else 0.0
+        dy = shifts[n.id]['dy'] if n.id in shifts else 0.0
+        dz = shifts[n.id]['dz'] if n.id in shifts else 0.0
+        
+        x_new, y_new, z_new = n.x + dx, n.y + dy, n.z + dz
+        nx_opt.append(x_new)
+        ny_opt.append(y_new)
+        nz_opt.append(z_new)
+        shifted_nodes[n.id] = (x_new, y_new, z_new)
+        
+        # Add red shift vectors if the node moved
+        if abs(dx) > 1e-4 or abs(dy) > 1e-4 or abs(dz) > 1e-4:
+            fig.add_trace(go.Scatter3d(
+                x=[n.x, x_new], y=[n.y, y_new], z=[n.z, z_new],
+                mode='lines', line=dict(color='red', width=5), name='Displacement Vector', showlegend=False
+            ))
+    
+    fig.add_trace(go.Scatter3d(
+        x=nx_opt, y=ny_opt, z=nz_opt, mode='markers',
+        marker=dict(size=6, color='red'), name='Optimized Nodes'
+    ))
+    
+    for m in ts.members:
+        xi, yi, zi = shifted_nodes[m.node_i.id]
+        xj, yj, zj = shifted_nodes[m.node_j.id]
+        fig.add_trace(go.Scatter3d(
+            x=[xi, xj], y=[yi, yj], z=[zi, zj],
+            mode='lines', line=dict(color='royalblue', width=5), showlegend=False
+        ))
+        
+    fig.update_layout(
+        scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'),
+        margin=dict(l=0, r=0, t=30, b=0), height=600,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    )
+    return fig
