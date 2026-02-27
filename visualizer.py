@@ -157,7 +157,7 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
     return fig_res
 
 def draw_shape_optimization_overlay(ts, shifts):
-    """Generates Figure 3 for the paper: 3D overlay of original vs optimized shape."""
+    """Generates Figure 3 for the paper: 3D overlay of original vs optimized shape with Labels."""
     fig = go.Figure()
 
     # 1. Original Nodes & Members (Faded Gray)
@@ -179,7 +179,7 @@ def draw_shape_optimization_overlay(ts, shifts):
         ))
 
     # 2. Shifted Nodes & Members (Blue & Red)
-    nx_opt, ny_opt, nz_opt = [], [], []
+    nx_opt, ny_opt, nz_opt, node_labels = [], [], [], []
     shifted_nodes = {}
     for n in ts.nodes:
         dx = shifts[n.id]['dx'] if n.id in shifts else 0.0
@@ -190,6 +190,7 @@ def draw_shape_optimization_overlay(ts, shifts):
         nx_opt.append(x_new)
         ny_opt.append(y_new)
         nz_opt.append(z_new)
+        node_labels.append(f"N{n.id}")  # Node labels
         shifted_nodes[n.id] = (x_new, y_new, z_new)
 
         # Add red shift vectors if the node moved
@@ -199,11 +200,16 @@ def draw_shape_optimization_overlay(ts, shifts):
                 mode='lines', line=dict(color='red', width=5), name='Displacement Vector', showlegend=False
             ))
 
+    # Add the final Optimized Nodes WITH text labels
     fig.add_trace(go.Scatter3d(
-        x=nx_opt, y=ny_opt, z=nz_opt, mode='markers',
+        x=nx_opt, y=ny_opt, z=nz_opt, mode='markers+text',
+        text=node_labels, textposition="top center",
+        textfont=dict(color='darkred', size=12, family="Arial Black"),
         marker=dict(size=6, color='red'), name='Optimized Nodes'
     ))
 
+    # Add Shifted Members and calculate their midpoints for labels
+    mid_x, mid_y, mid_z, mbr_labels = [], [], [], []
     for m in ts.members:
         xi, yi, zi = shifted_nodes[m.node_i.id]
         xj, yj, zj = shifted_nodes[m.node_j.id]
@@ -211,17 +217,29 @@ def draw_shape_optimization_overlay(ts, shifts):
             x=[xi, xj], y=[yi, yj], z=[zi, zj],
             mode='lines', line=dict(color='royalblue', width=5), showlegend=False
         ))
+        # Save midpoint for text rendering
+        mid_x.append((xi + xj) / 2)
+        mid_y.append((yi + yj) / 2)
+        mid_z.append((zi + zj) / 2)
+        mbr_labels.append(f"M{m.id}")
 
+    # Add the Member text labels
+    fig.add_trace(go.Scatter3d(
+        x=mid_x, y=mid_y, z=mid_z,
+        mode='text', text=mbr_labels,
+        textfont=dict(color='darkblue', size=11, family="Arial"),
+        showlegend=False
+    ))
+
+    # Clean layout with your transparent grid settings
     fig.update_layout(
-        scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)', aspectmode='data'),
+        scene=dict(
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
+            zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
+            aspectmode='data'
+        ),
         margin=dict(l=0, r=0, t=30, b=0), height=600,
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-    )
-    fig.update_layout(
-    scene=dict(
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
-        zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
-        )
     )
     return fig
