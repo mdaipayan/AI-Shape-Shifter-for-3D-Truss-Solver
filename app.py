@@ -479,7 +479,7 @@ with col1:
                                     xaxis_title="Generation (Epoch)", yaxis_title="Structural Weight (kg)",
                                     margin=dict(l=0, r=0, t=10, b=0), height=350, plot_bgcolor="rgba(240, 240, 240, 0.5)"
                                 )
-                                st.plotly_chart(fig_conv, use_container_width=True)
+                                st.plotly_chart(fig_conv, width='stretch')
                             
                             # Display Sizing Results
                             st.markdown("#### Sizing Output")
@@ -521,7 +521,7 @@ with col1:
                                 st.markdown("#### 📐 Figure 3: Shape Optimization Overlay")
                                 st.caption("Save this diagram as a PNG for your journal manuscript submission.")
                                 fig_overlay = draw_shape_optimization_overlay(base_ts, final_node_shifts)
-                                st.plotly_chart(fig_overlay, use_container_width=True)
+                                st.plotly_chart(fig_overlay, width='stretch')
                                 
                         else:
                             st.error("❌ Optimizer failed to find ANY sizing/shape combination that satisfies the IS 800 constraints.")
@@ -623,7 +623,7 @@ with col2:
             if member_errors: st.warning(f"⚠️ Connectivity Warning: Cannot draw M{', M'.join(member_errors)}.")
             
             st.session_state['base_fig'] = fig_base 
-            st.plotly_chart(fig_base, use_container_width=True)
+            st.plotly_chart(fig_base, width='stretch')
 
     with tab2:
         if 'solved_combos' in st.session_state and st.session_state['solved_combos']:
@@ -634,7 +634,7 @@ with col2:
             
             fig_res = draw_results_fbd(ts_to_view, scale_factor=current_scale, unit_label=current_unit)
             st.session_state['current_fig'] = fig_res 
-            st.plotly_chart(fig_res, use_container_width=True)
+            st.plotly_chart(fig_res, width='stretch')
         else:
             st.info("👈 Input loads and click 'Calculate Results' to view the force diagram.")
 
