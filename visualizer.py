@@ -169,13 +169,13 @@ def draw_shape_optimization_overlay(ts, shifts):
 
     fig.add_trace(go.Scatter3d(
         x=nx_base, y=ny_base, z=nz_base, mode='markers',
-        marker=dict(size=4, color='lightgray'), name='Original Nodes'
+        marker=dict(size=4, color='drakgray'), name='Original Nodes'
     ))
 
     for m in ts.members:
         fig.add_trace(go.Scatter3d(
             x=[m.node_i.x, m.node_j.x], y=[m.node_i.y, m.node_j.y], z=[m.node_i.z, m.node_j.z],
-            mode='lines', line=dict(color='lightgray', width=2, dash='dot'), showlegend=False
+            mode='lines', line=dict(color='darkgray', width=2, dash='dot'), showlegend=False
         ))
 
     # 2. Shifted Nodes & Members (Blue & Red)
