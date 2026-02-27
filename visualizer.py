@@ -217,4 +217,11 @@ def draw_shape_optimization_overlay(ts, shifts):
         margin=dict(l=0, r=0, t=30, b=0), height=600,
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
+    fig.update_layout(
+    scene=dict(
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
+        zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False),
+        )
+    )
     return fig
