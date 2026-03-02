@@ -12,7 +12,17 @@ from visualizer import draw_undeformed_geometry, draw_results_fbd, draw_shape_op
 
 st.set_page_config(page_title="Professional Truss Suite (3D)", layout="wide")
 st.title("🏗️ Professional Space Truss Analysis Developed by D Mandal")
-
+# High-resolution PNG export settings for Journal Publication (approx 300+ DPI)
+high_res_png_config = {
+    'toImageButtonOptions': {
+        'format': 'png', # 'svg' can be used, but Plotly 3D renders as rasterised PNGs internally anyway
+        'filename': 'High_Res_Truss_Export',
+        'height': 800,
+        'width': 1200,
+        'scale': 4  # This multiplies the resolution by 4x for extreme sharpness
+    },
+    'displayModeBar': True
+}
 # ---------------------------------------------------------
 # 1. INITIALIZE SESSION STATE (MUST BE AT THE TOP)
 # ---------------------------------------------------------
