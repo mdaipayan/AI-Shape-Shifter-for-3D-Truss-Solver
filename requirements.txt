@@ -5,3 +5,4 @@ plotly>=5.15.0
 kaleido==0.2.1
 scipy>=1.10.0
 fpdf2>=2.7.9
+playwright
