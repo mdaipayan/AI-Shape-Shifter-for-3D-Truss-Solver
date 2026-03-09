@@ -132,7 +132,7 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
         showlegend=False
     ))
 
-    # 3. Add 3D Annotations for Support Reactions
+    # 3. Add 3D Annotations for Support Reactions (Fixed for Clipping)
     scene_annotations = []
     for node in ts.nodes:
         if node.rx or node.ry or node.rz:
@@ -142,12 +142,25 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
 
             reac_text = f"Rx:{rx_s}<br>Ry:{ry_s}<br>Rz:{rz_s}"
 
+            # Dynamically push the text boxes OUTWARD based on the node's position
+            # This prevents them from clumping together or clipping into the floor
+            x_offset = -50 if node.x < 0 else 50
+            y_offset = -60 # Negative 'ay' pushes the text UP in screen coordinates
+
             scene_annotations.append(dict(
                 x=node.x, y=node.y, z=node.z,
                 text=reac_text,
-                showarrow=True, arrowhead=2, ax=30, ay=-40,
-                font=dict(color="white", size=10),
-                bgcolor="darkgreen"
+                showarrow=True, 
+                arrowhead=2, 
+                arrowcolor="black",
+                arrowwidth=2,
+                ax=x_offset, 
+                ay=y_offset,
+                font=dict(color="white", size=11, family="Arial Black"),
+                bgcolor="darkgreen",
+                bordercolor="black",
+                borderwidth=1,
+                opacity=0.95
             ))
 
     # Configure 3D Scene with a massive viewport for tall towers
