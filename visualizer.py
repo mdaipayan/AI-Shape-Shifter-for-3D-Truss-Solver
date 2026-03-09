@@ -66,7 +66,7 @@ def draw_undeformed_geometry(node_df, member_df, load_df, scale_factor=1000.0, u
 
     
     # Configure 3D Scene with a massive viewport for tall towers
-    fig.update_layout(
+    fig_base.update_layout(
         scene=dict(
             xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
             aspectmode='data', # Keeps the strict 1:1:1 engineering scale
@@ -151,7 +151,7 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
             ))
 
     # Configure 3D Scene with a massive viewport for tall towers
-    fig.update_layout(
+    fig_res.update_layout(
         scene=dict(
             xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
             aspectmode='data', # Keeps the strict 1:1:1 engineering scale
