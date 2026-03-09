@@ -64,14 +64,19 @@ def draw_undeformed_geometry(node_df, member_df, load_df, scale_factor=1000.0, u
                 showlegend=False
             ))
 
-    # Configure 3D Scene
-    fig_base.update_layout(
+    
+    # Configure 3D Scene with a massive viewport for tall towers
+    fig.update_layout(
         scene=dict(
             xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
-            aspectmode='data' # Enforces 1:1:1 geometric scaling
+            aspectmode='data', # Keeps the strict 1:1:1 engineering scale
+            camera=dict(
+                eye=dict(x=1.8, y=1.8, z=1.8) # Pulls the camera back to fit 48m tall structures
+            )
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        height=600
+        height=900, # Increased from 600 to 900 for a massive viewport
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
     return fig_base, node_errors, member_errors, load_errors
 
@@ -145,14 +150,18 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
                 bgcolor="darkgreen"
             ))
 
-    fig_res.update_layout(
+    # Configure 3D Scene with a massive viewport for tall towers
+    fig.update_layout(
         scene=dict(
             xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
-            aspectmode='data',
-            annotations=scene_annotations
+            aspectmode='data', # Keeps the strict 1:1:1 engineering scale
+            camera=dict(
+                eye=dict(x=1.8, y=1.8, z=1.8) # Pulls the camera back to fit 48m tall structures
+            )
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        height=600
+        height=900, # Increased from 600 to 900 for a massive viewport
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
     return fig_res
 
@@ -231,15 +240,17 @@ def draw_shape_optimization_overlay(ts, shifts):
         showlegend=False
     ))
 
-    # Clean layout with your transparent grid settings
+    # Configure 3D Scene with a massive viewport for tall towers
     fig.update_layout(
         scene=dict(
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
-            zaxis=dict(showgrid=False, zeroline=False, showticklabels=False, showbackground=False, title=''),
-            aspectmode='data'
+            xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
+            aspectmode='data', # Keeps the strict 1:1:1 engineering scale
+            camera=dict(
+                eye=dict(x=1.8, y=1.8, z=1.8) # Pulls the camera back to fit 48m tall structures
+            )
         ),
-        margin=dict(l=0, r=0, t=30, b=0), height=600,
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=900, # Increased from 600 to 900 for a massive viewport
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
     return fig
