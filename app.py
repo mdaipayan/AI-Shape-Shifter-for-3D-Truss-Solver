@@ -720,23 +720,7 @@ with col2:
             st.plotly_chart(fig_res, width='stretch', config=high_res_png_config)
         else:
             st.info("👈 Input loads and click 'Calculate Results' to view the force diagram.")
-        # --- PASTE THIS NEW BLOCK HERE ---
-            st.markdown("### 🛑 Support Reactions (Tabular)")
-            reaction_data = []
-            for n in ts_to_view.nodes:
-                if n.rx or n.ry or n.rz: # If the node has any restraint
-                    reaction_data.append({
-                        "Node": n.id,
-                        f"Fx ({current_unit})": round(n.rx_val / current_scale, 2) if n.rx else 0.0,
-                        f"Fy ({current_unit})": round(n.ry_val / current_scale, 2) if n.ry else 0.0,
-                        f"Fz ({current_unit})": round(n.rz_val / current_scale, 2) if n.rz else 0.0,
-                    })
-            
-            if reaction_data:
-                st.dataframe(pd.DataFrame(reaction_data).set_index("Node"))
-            else:
-                st.info("No supports defined or no reactions calculated.")
-            # ----------------------------------
+        
 # ---------------------------------------------------------
 # NEW SECTION: THE "GLASS BOX" PEDAGOGICAL EXPLORER (3D)
 # ---------------------------------------------------------
