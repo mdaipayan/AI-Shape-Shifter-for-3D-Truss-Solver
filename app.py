@@ -259,12 +259,15 @@ with col1:
 
     with col_btn3:
         if st.button("🏗️ Load 72-Bar"):
+            # 1. GENERATE NODES (Base is 3x3m, Height is 6m in 4 tiers)
             nodes = []
+            # Base Nodes (Fully Restrained)
             nodes.append([-1.5, 1.5, 0.0, 1, 1, 1])
             nodes.append([1.5, 1.5, 0.0, 1, 1, 1])
             nodes.append([1.5, -1.5, 0.0, 1, 1, 1])
             nodes.append([-1.5, -1.5, 0.0, 1, 1, 1])
             
+            # Upper Tier Nodes (Free)
             for i in range(1, 5):
                 z = i * 1.5
                 nodes.append([-1.5, 1.5, z, 0, 0, 0])
@@ -273,55 +276,61 @@ with col1:
                 nodes.append([-1.5, -1.5, z, 0, 0, 0])
             st.session_state['nodes_data'] = pd.DataFrame(nodes, columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
             
+            # 2. GENERATE MEMBERS & 16 DISCRETE SYMMETRY GROUPS
             members, groups = [], []
             member_id = 1
             for t in range(4):
                 B1, B2, B3, B4 = t*4+1, t*4+2, t*4+3, t*4+4
                 T1, T2, T3, T4 = t*4+5, t*4+6, t*4+7, t*4+8
                 
+                # Vertical Legs
                 v_group = []
                 for b, top in [(B1, T1), (B2, T2), (B3, T3), (B4, T4)]:
                     members.append([b, top, 0.005, 2e11])
-                    v_group.append(str(member_id))
-                    member_id += 1
+                    v_group.append(str(member_id)); member_id += 1
                 groups.append(", ".join(v_group))
                 
+                # Horizontal Rings
                 h_group = []
                 for n1, n2 in [(T1, T2), (T2, T3), (T3, T4), (T4, T1)]:
                     members.append([n1, n2, 0.005, 2e11])
-                    h_group.append(str(member_id))
-                    member_id += 1
+                    h_group.append(str(member_id)); member_id += 1
                 groups.append(", ".join(h_group))
                 
+                # Face X-Diagonals
                 fd_group = []
                 for n1, n2 in [(B1, T2), (B2, T1), (B2, T3), (B3, T2), (B3, T4), (B4, T3), (B4, T1), (B1, T4)]:
                     members.append([n1, n2, 0.005, 2e11])
-                    fd_group.append(str(member_id))
-                    member_id += 1
+                    fd_group.append(str(member_id)); member_id += 1
                 groups.append(", ".join(fd_group))
                 
+                # Plan/Horizontal Diagonals
                 pd_group = []
                 for n1, n2 in [(T1, T3), (T2, T4)]:
                     members.append([n1, n2, 0.005, 2e11])
-                    pd_group.append(str(member_id))
-                    member_id += 1
+                    pd_group.append(str(member_id)); member_id += 1
                 groups.append(", ".join(pd_group))
                 
             st.session_state['members_data'] = pd.DataFrame(members, columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
             
+            # 3. SEPARATED NODAL LOADS (Gravity vs Lateral)
             st.session_state['loads_data'] = pd.DataFrame([
-                [17, 50000.0, 50000.0, -25000.0, "WL"],
+                # Gravity Loads (DL) on all top nodes
+                [17, 0.0, 0.0, -25000.0, "DL"],
                 [18, 0.0, 0.0, -25000.0, "DL"],
                 [19, 0.0, 0.0, -25000.0, "DL"],
-                [20, 0.0, 0.0, -25000.0, "DL"]
+                [20, 0.0, 0.0, -25000.0, "DL"],
+                # Asymmetric Lateral Wind (WL) on Node 17 only
+                [17, 50000.0, 50000.0, 0.0, "WL"]
             ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
             
+            # 4. LOAD COMBINATIONS
             st.session_state['combos_data'] = pd.DataFrame([
-                ["Serviceability (1.0DL + 1.0WL)", 1.0, 1.0],
-                ["Ultimate (1.5DL + 1.5WL)", 1.5, 1.5],
-                ["Dead Load Only (1.5DL)", 1.5, 0.0]
+                ["Gravity Only (1.0DL)", 1.0, 0.0],
+                ["Extreme Wind + Gravity (1.5DL + 1.5WL)", 1.5, 1.5]
             ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
             
+            # 5. OPTIMIZATION SETTINGS
             st.session_state['shape_bounds_data'] = pd.DataFrame(columns=["Node_ID", "dX_min", "dX_max", "dY_min", "dY_max", "dZ_min", "dZ_max"])
             st.session_state['group_input_val'] = "; ".join(groups)
             clear_results()
