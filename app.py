@@ -195,7 +195,7 @@ with col1:
     st.header("1. Input Data")
     
     st.info("💡 **Benchmark Library:** Load standard geometries to test the solver and AI.")
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
     
     with col_btn1:
         if st.button("🔺 Load Tetrahedron"):
@@ -323,6 +323,79 @@ with col1:
             ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
             
             st.session_state['shape_bounds_data'] = pd.DataFrame(columns=["Node_ID", "dX_min", "dX_max", "dY_min", "dY_max", "dZ_min", "dZ_max"])
+            st.session_state['group_input_val'] = "; ".join(groups)
+            clear_results()
+            
+    with col_btn4:
+        if st.button("⚡ Load 144-Bar Tower"):
+            # 1. GENERATE TOWER NODES (9 Tiers, 48 meters tall)
+            nodes = []
+            heights = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0]
+            half_widths = [6.0, 5.5, 5.0, 4.0, 3.5, 3.0, 2.5, 2.0, 2.0]
+            
+            for i in range(9):
+                z = heights[i]
+                hw = half_widths[i]
+                # Lock the base to the ground
+                rx = ry = rz = 1 if i == 0 else 0
+                nodes.append([hw, hw, z, rx, ry, rz])
+                nodes.append([-hw, hw, z, rx, ry, rz])
+                nodes.append([-hw, -hw, z, rx, ry, rz])
+                nodes.append([hw, -hw, z, rx, ry, rz])
+                
+            st.session_state['nodes_data'] = pd.DataFrame(nodes, columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
+            
+            # 2. GENERATE MEMBERS & SYMMETRY GROUPS
+            members = []
+            groups = []
+            member_id = 1
+            
+            for i in range(8):
+                base_idx = i * 4 + 1
+                top_idx = (i + 1) * 4 + 1
+                
+                tier_legs, tier_rings, tier_x = [], [], []
+                
+                # Vertical/Tapered Legs
+                for j in range(4):
+                    members.append([base_idx + j, top_idx + j, 0.005, 2e11])
+                    tier_legs.append(str(member_id)); member_id += 1
+                # Horizontal Rings
+                for j in range(4):
+                    members.append([top_idx + j, top_idx + ((j + 1) % 4), 0.005, 2e11])
+                    tier_rings.append(str(member_id)); member_id += 1
+                # X-Bracing on all 4 faces
+                for j in range(4):
+                    members.append([base_idx + j, top_idx + ((j + 1) % 4), 0.003, 2e11])
+                    tier_x.append(str(member_id)); member_id += 1
+                    members.append([base_idx + ((j + 1) % 4), top_idx + j, 0.003, 2e11])
+                    tier_x.append(str(member_id)); member_id += 1
+                    
+                groups.append(", ".join(tier_legs))
+                groups.append(", ".join(tier_rings))
+                groups.append(", ".join(tier_x))
+                
+            st.session_state['members_data'] = pd.DataFrame(members, columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
+            
+            # 3. APPLY ASYMMETRIC LATERAL CABLE LOADS AT THE TOP
+            st.session_state['loads_data'] = pd.DataFrame([
+                [33, 25000.0, 0.0, -40000.0, "WL"],
+                [34, 25000.0, 0.0, -40000.0, "WL"],
+                [35, 25000.0, 0.0, -40000.0, "WL"],
+                [36, 25000.0, 0.0, -40000.0, "WL"]
+            ], columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+            
+            st.session_state['combos_data'] = pd.DataFrame([
+                ["Extreme Wind + Gravity (1.2DL + 1.5WL)", 1.2, 1.5]
+            ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
+            
+            # 4. ALLOW AI TO MORPH THE TOWER TAPER (Shape Optimization Bounds)
+            shape_bounds = []
+            for i in range(1, 8): # Allow middle 7 tiers to shift horizontally
+                for j in range(4):
+                    shape_bounds.append([i * 4 + 1 + j, -1.0, 1.0, -1.0, 1.0, 0.0, 0.0])
+                    
+            st.session_state['shape_bounds_data'] = pd.DataFrame(shape_bounds, columns=["Node_ID", "dX_min", "dX_max", "dY_min", "dY_max", "dZ_min", "dZ_max"])
             st.session_state['group_input_val'] = "; ".join(groups)
             clear_results()
 
