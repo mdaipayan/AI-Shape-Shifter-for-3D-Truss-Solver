@@ -166,14 +166,15 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
     # Configure 3D Scene with a massive viewport for tall towers
     fig_res.update_layout(
         scene=dict(
+            annotations=scene_annotations,  # <--- THIS IS THE MISSING LINE
             xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)',
             aspectmode='data', # Keeps the strict 1:1:1 engineering scale
             camera=dict(
-                eye=dict(x=1.8, y=1.8, z=1.8) # Pulls the camera back to fit 48m tall structures
+                eye=dict(x=1.8, y=1.8, z=1.8) # Pulls the camera back
             )
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        height=900, # Increased from 600 to 900 for a massive viewport
+        height=900, 
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
     return fig_res
