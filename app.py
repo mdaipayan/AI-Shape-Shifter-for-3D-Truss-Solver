@@ -124,7 +124,7 @@ if uploaded_file is not None:
 # ---------------------------------------------------------
 # CACHED SOLVER ENGINE
 # ---------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def run_structural_analysis(n_df, m_df, l_df, combo_factors, a_type, l_steps):
     ts = TrussSystem()
     node_map = {}
