@@ -124,14 +124,15 @@ def draw_results_fbd(ts, scale_factor=1000.0, unit_label="kN"):
         mid_text.append(f"M{mbr.id}: {val_scaled} {unit_label}")
         mid_colors.append(color)
 
-    # Add force value text tags at midpoints
     fig_res.add_trace(go.Scatter3d(
         x=mid_x, y=mid_y, z=mid_z,
-        mode='text', text=mid_text,
-        textfont=dict(color=mid_colors, size=12, family="Arial Black"),
+        mode='markers', 
+        marker=dict(size=8, color='rgba(0,0,0,0)'),  # Fully transparent markers
+        hovertext=mid_text,  # The text string we built earlier
+        hoverlabel=dict(bgcolor=mid_colors, font=dict(color='white', family="Arial Black")),
+        hoverinfo='text',
         showlegend=False
     ))
-
     # 3. Add 3D Annotations for Support Reactions (Fixed for Clipping)
     scene_annotations = []
     for node in ts.nodes:
