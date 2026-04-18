@@ -195,7 +195,7 @@ with col1:
     st.header("1. Input Data")
     
     st.info("💡 **Benchmark Library:** Load standard geometries to test the solver and AI.")
-    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+    col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns(5)
     
     with col_btn1:
         if st.button("🔺 Load Tetrahedron"):
@@ -336,7 +336,7 @@ with col1:
             clear_results()
             
     with col_btn4:
-        if st.button("⚡ Load 144-Bar Tower"):
+        if st.button("⚡ Load 144-Bar"):
             # 1. GENERATE TOWER NODES (9 Tiers, 48 meters tall)
             nodes = []
             heights = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 42.0, 48.0]
@@ -406,6 +406,94 @@ with col1:
                     
             st.session_state['shape_bounds_data'] = pd.DataFrame(shape_bounds, columns=["Node_ID", "dX_min", "dX_max", "dY_min", "dY_max", "dZ_min", "dZ_max"])
             st.session_state['group_input_val'] = "; ".join(groups)
+            clear_results()
+
+    with col_btn5:
+        if st.button("🏟️ Load Stadium Roof"):
+            # 1. GENERATE STADIUM CANOPY NODES (Double Layer Grid Cantilever)
+            nodes = []
+            bottom_node_ids = {}
+            node_id = 1
+            
+            # Bottom Layer (Z=0). 5 Bays Span x 7 Bays Width. Cantilevered from back wall at X=0.
+            for x_i in range(5): 
+                for y_i in range(7): 
+                    x, y, z = x_i * 5.0, y_i * 5.0, 0.0
+                    rx = ry = rz = 1 if x_i == 0 else 0
+                    nodes.append([x, y, z, rx, ry, rz])
+                    bottom_node_ids[(x_i, y_i)] = node_id
+                    node_id += 1
+            
+            top_node_ids = {}
+            # Top Layer (Z=2.5m). Offset by half a bay (2.5m) to create tetrahedrons.
+            for x_i in range(4): 
+                for y_i in range(6): 
+                    x, y, z = x_i * 5.0 + 2.5, y_i * 5.0 + 2.5, 2.5
+                    nodes.append([x, y, z, 0, 0, 0])
+                    top_node_ids[(x_i, y_i)] = node_id
+                    node_id += 1
+                    
+            st.session_state['nodes_data'] = pd.DataFrame(nodes, columns=["X", "Y", "Z", "Restrain_X", "Restrain_Y", "Restrain_Z"])
+            
+            # 2. GENERATE MEMBERS & SYMMETRY GROUPS
+            members = []
+            b_chords, t_chords, diags = [], [], []
+            member_id = 1
+            
+            # Bottom Chords
+            for x_i in range(5):
+                for y_i in range(7):
+                    n1 = bottom_node_ids[(x_i, y_i)]
+                    if x_i < 4:
+                        members.append([n1, bottom_node_ids[(x_i+1, y_i)], 0.008, 2e11])
+                        b_chords.append(str(member_id)); member_id += 1
+                    if y_i < 6:
+                        members.append([n1, bottom_node_ids[(x_i, y_i+1)], 0.008, 2e11])
+                        b_chords.append(str(member_id)); member_id += 1
+                        
+            # Top Chords
+            for x_i in range(4):
+                for y_i in range(6):
+                    n1 = top_node_ids[(x_i, y_i)]
+                    if x_i < 3:
+                        members.append([n1, top_node_ids[(x_i+1, y_i)], 0.006, 2e11])
+                        t_chords.append(str(member_id)); member_id += 1
+                    if y_i < 5:
+                        members.append([n1, top_node_ids[(x_i, y_i+1)], 0.006, 2e11])
+                        t_chords.append(str(member_id)); member_id += 1
+                        
+            # Diagonals connecting top nodes to the 4 adjacent bottom nodes
+            for x_i in range(4):
+                for y_i in range(6):
+                    n_top = top_node_ids[(x_i, y_i)]
+                    surrounding = [
+                        bottom_node_ids[(x_i, y_i)], bottom_node_ids[(x_i+1, y_i)],
+                        bottom_node_ids[(x_i, y_i+1)], bottom_node_ids[(x_i+1, y_i+1)]
+                    ]
+                    for n_bot in surrounding:
+                        members.append([n_top, n_bot, 0.004, 2e11])
+                        diags.append(str(member_id)); member_id += 1
+                        
+            st.session_state['members_data'] = pd.DataFrame(members, columns=["Node_I", "Node_J", "Area(sq.m)", "E (N/sq.m)"])
+            
+            # 3. APPLY LOADS
+            loads = []
+            for x_i in range(4):
+                for y_i in range(6):
+                    n_id = top_node_ids[(x_i, y_i)]
+                    loads.append([n_id, 0.0, 0.0, -15000.0, "DL"]) # Downward gravity/cladding
+                    loads.append([n_id, 0.0, 0.0, 25000.0, "WL"])  # Upward wind suction
+            st.session_state['loads_data'] = pd.DataFrame(loads, columns=["Node_ID", "Force_X (N)", "Force_Y (N)", "Force_Z (N)", "Load_Case"])
+            
+            st.session_state['combos_data'] = pd.DataFrame([
+                ["Gravity Design (1.5DL)", 1.5, 0.0],
+                ["Wind Uplift Reversal (0.9DL + 1.5WL)", 0.9, 1.5]
+            ], columns=["Combo_Name", "Factor_DL", "Factor_WL"])
+            
+            # 4. OPTIMIZATION SETTINGS
+            st.session_state['shape_bounds_data'] = pd.DataFrame(columns=["Node_ID", "dX_min", "dX_max", "dY_min", "dY_max", "dZ_min", "dZ_max"])
+            # Grouping into Bottom Chords, Top Chords, and Diagonals for standard sizing
+            st.session_state['group_input_val'] = f"{', '.join(b_chords)}; {', '.join(t_chords)}; {', '.join(diags)}"
             clear_results()
 
     st.subheader("Nodes")
